@@ -37,10 +37,11 @@ private[knn] abstract class Tree extends Serializable {
    * for MetricNode this can be used to determine which child does queryVector falls into
    */
   private[knn] def queryCost(candidates: KNNCandidates): Double =
-    if(pivot.vector.size > 0)
+    if(pivot.vector.size > 0) {
       pivot.fastDistance(candidates.queryVector) - candidates.maxDistance
-    else
+    } else {
       0.0
+    }
 }
 
 case object Empty extends Tree {
@@ -95,8 +96,9 @@ case class MetricNode(leftChild: Tree,
         }
       }
       // check again to see if the remaining child is still worth looking
-      if(candidates.notFull || remainingChild.queryCost(candidates) < remainingChild.radius)
+      if (candidates.notFull || remainingChild.queryCost(candidates) < remainingChild.radius) {
         remainingChild.query(candidates)
+      }
     }
     candidates
   }
@@ -157,7 +159,7 @@ class VectorWithNorm(val vector: Vector, val norm: Double) extends Serializable 
   }
   def fastDistance(v: VectorWithNorm): Double = math.sqrt(fastSquaredDistance(v))
 
-  override def toString = s"$vector ($norm)"
+  override def toString: String = s"$vector ($norm)"
 }
 
 private[knn]
