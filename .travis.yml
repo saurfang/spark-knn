@@ -1,0 +1,19 @@
+language: scala
+scala:
+  - 2.10.5
+jdk:
+  - oraclejdk8
+  - openjdk7
+sudo: false
+cache:
+  directories:
+    - $HOME/.ivy2/cache
+    - $HOME/.sbt/boot/
+script:
+  - sbt -jvm-opts travis/jvmopts.compile compile
+  - sbt -jvm-opts travis/jvmopts.test coverage test
+  - sbt -jvm-opts travis/jvmopts.test scalastyle
+  - find $HOME/.sbt -name "*.lock" | xargs rm
+  - find $HOME/.ivy2 -name "ivydata-*.properties" | xargs rm
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
