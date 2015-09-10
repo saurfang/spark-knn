@@ -16,15 +16,15 @@ object Common {
     updateOptions := updateOptions.value.withCachedResolution(true)
   )
 
-  def tsneProject(path: String): Project = macro tsneProjectMacroImpl
+  def knnProject(path: String): Project = macro knnProjectMacroImpl
 
-  def tsneProjectMacroImpl(c: Context)(path: c.Expr[String]) = {
+  def knnProjectMacroImpl(c: Context)(path: c.Expr[String]) = {
     import c.universe._
     reify {
       (Project.projectMacroImpl(c).splice in file(path.splice)).
         settings(name := path.splice).
         settings(Dependencies.Versions).
-        settings(commonSettings: _*)
+        settings(commonSettings)
     }
   }
 }
