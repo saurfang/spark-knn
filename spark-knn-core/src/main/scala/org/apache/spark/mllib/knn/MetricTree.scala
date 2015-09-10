@@ -44,6 +44,7 @@ private[knn] abstract class Tree extends Serializable {
     }
 }
 
+private[knn]
 case object Empty extends Tree {
   val leftChild = this
   val rightChild = this
@@ -55,25 +56,42 @@ case object Empty extends Tree {
   override def query(candidates: KNNCandidates): KNNCandidates = candidates
 }
 
-case class Leaf(pivot: VectorWithNorm, size: Int) extends Tree {
+private[knn]
+case class Leaf (data: IndexedSeq[VectorWithNorm],
+                pivot: VectorWithNorm,
+                radius: Double) extends Tree {
   val leftChild = Empty
   val rightChild = Empty
-  val radius = 0.0
+  val size = data.size
 
-  override def iterator: Iterator[Vector] = Iterator.fill(size)(pivot.vector)
+  override def iterator: Iterator[Vector] = data.iterator.map(_.vector)
 
   override def query(candidates: KNNCandidates): KNNCandidates = {
-    var count = 0
-    val distance = pivot.fastDistance(candidates.queryVector)
-    // add as many as we can until candidates are full or our distance isn't better than worst distance
-    while(count < size && (candidates.notFull || distance < candidates.maxDistance)) {
-      candidates.insert(pivot)
-      count += 1
-    }
+    data
+      .map(v => (v, candidates.queryVector.fastDistance(v)))
+      .sortBy(_._2)
+      .takeWhile{ case(_, d) => candidates.notFull ||  d < candidates.maxDistance }
+      .foreach { case(v, _) => candidates.insert(v) }
     candidates
   }
 }
 
+private[knn]
+object Leaf {
+  def apply(data: IndexedSeq[VectorWithNorm]): Leaf = {
+    val vectors = data.map(_.vector.toBreeze)
+    val (minV, maxV) = data.foldLeft((vectors.head, vectors.head)) {
+      case ((accMin, accMax), v) =>
+        val bv = v.vector.toBreeze
+        (min(accMin, bv), max(accMax, bv))
+    }
+    val pivot = new VectorWithNorm((minV + maxV) / 2.0)
+    val radius = math.sqrt(squaredDistance(minV, maxV)) / 2.0
+    Leaf(data, pivot, radius)
+  }
+}
+
+private[knn]
 case class MetricNode(leftChild: Tree,
                       rightChild: Tree,
                       pivot: VectorWithNorm,
@@ -105,8 +123,8 @@ case class MetricNode(leftChild: Tree,
 }
 
 object MetricTree {
-  def create(data: IndexedSeq[Vector], rand: Random = new Random): Tree = {
-    apply(data.map(x => new VectorWithNorm(x)), rand)
+  def create(data: IndexedSeq[Vector], leafSize: Int = 1, rand: Random = new Random): Tree = {
+    apply(data.map(x => new VectorWithNorm(x)), leafSize, rand)
   }
 
   /**
@@ -116,23 +134,25 @@ object MetricTree {
    * @param rand random number generator used in pivot point selecting
    * @return a [[Tree]] can be used to do k-NN query
    */
-  def apply(data: IndexedSeq[VectorWithNorm], rand: Random): Tree = {
+  def apply(data: IndexedSeq[VectorWithNorm], leafSize: Int, rand: Random): Tree = {
     val size = data.size
     if(size == 0) {
       Empty
+    } else if(size <= leafSize) {
+      Leaf(data)
     } else {
       val randomPivot = data(rand.nextInt(size))
       val leftPivot = data.maxBy(randomPivot.fastSquaredDistance)
       if(leftPivot == randomPivot) {
         // all points are identical (including only one point left)
-        Leaf(leftPivot, data.size)
+        Leaf(data, randomPivot, 0.0)
       } else {
         val rightPivot = data.maxBy(leftPivot.fastSquaredDistance)
         val pivot = new VectorWithNorm(Vectors.fromBreeze((leftPivot.vector.toBreeze + rightPivot.vector.toBreeze) / 2.0))
         val radius = data.maxBy(pivot.fastSquaredDistance).fastDistance(pivot)
         val (leftPartition, rightPartition) = data.partition(v => leftPivot.fastSquaredDistance(v) < rightPivot.fastSquaredDistance(v))
 
-        MetricNode(apply(leftPartition, rand), apply(rightPartition, rand), pivot, radius, size)
+        MetricNode(apply(leftPartition, leafSize, rand), apply(rightPartition, leafSize, rand), pivot, radius, size)
       }
     }
   }
@@ -148,11 +168,7 @@ private[knn]
 class VectorWithNorm(val vector: Vector, val norm: Double) extends Serializable {
 
   def this(vector: Vector) = this(vector, Vectors.norm(vector, 2.0))
-
-  def this(array: Array[Double]) = this(Vectors.dense(array))
-
-  /** Converts the vector to a dense vector. */
-  def toDense: VectorWithNorm = new VectorWithNorm(Vectors.dense(vector.toArray), norm)
+  def this(vector: breeze.linalg.Vector[Double]) = this(Vectors.fromBreeze(vector))
 
   def fastSquaredDistance(v: VectorWithNorm): Double = {
     MLUtils.fastSquaredDistance(vector, norm, v.vector, v.norm)
