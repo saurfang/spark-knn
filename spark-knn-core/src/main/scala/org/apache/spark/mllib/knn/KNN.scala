@@ -7,9 +7,9 @@ import org.apache.spark.rdd.{ShuffledRDD, RDD}
 import scala.annotation.tailrec
 
 
-class KNN private(val topTreeSize: Int,
-                  val topTreeLeafSize: Int
-                   ) extends Serializable with Logging {
+class KNN (val topTreeSize: Int,
+           val topTreeLeafSize: Int
+            ) extends Serializable with Logging {
   def run[T](data: RDD[(Vector, T)]): KNNRDD[T] = {
     val sampled = data.sample(false, topTreeSize / data.count()).collect()
     val topTree = MetricTree.create(sampled, topTreeLeafSize)
@@ -25,7 +25,7 @@ class KNN private(val topTreeSize: Int,
 }
 
 class KNNPartitioner[T](tree: Tree[T]) extends Partitioner {
-  override def numPartitions: Int = Tree.getLeafCount(tree)
+  override def numPartitions: Int = tree.leafCount
 
   override def getPartition(key: Any): Int = {
     key match {
@@ -43,7 +43,7 @@ class KNNPartitioner[T](tree: Tree[T]) extends Partitioner {
         if(leftDistance < rightDistance) {
           searchIndex(v, node.leftChild, acc)
         } else {
-          searchIndex(v, node.rightChild, acc + Tree.getLeafCount(node.leftChild))
+          searchIndex(v, node.rightChild, acc + node.leftChild.leafCount)
         }
       case _ => acc
     }
