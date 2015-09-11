@@ -5,8 +5,7 @@ lazy val root = Project("spark-knn", file(".")).
   aggregate(core, examples)
 
 lazy val core = knnProject("spark-knn-core").
-  settings(Dependencies.core).
-  settings(coverageEnabled := true)
+  settings(Dependencies.core)
 
 lazy val examples = knnProject("spark-knn-examples").
   dependsOn(core).
