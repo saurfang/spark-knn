@@ -13,6 +13,7 @@ private[knn] abstract class Tree[T] extends Serializable {
   val leftChild: Tree[T]
   val rightChild: Tree[T]
   val size: Int
+  val leafCount: Int
   val pivot: VectorWithNorm
   val radius: Double
 
@@ -52,28 +53,11 @@ private[knn] abstract class Tree[T] extends Serializable {
 }
 
 private[knn]
-object Tree {
-  def getLeafCount[T](tree: Tree[T]): Int = {
-    @tailrec def helper(acc: Int, trees: List[Tree[T]]): Int = {
-      trees match {
-        case Nil => acc
-        case head::tail =>
-          head match {
-            case Empty => acc
-            case _: Leaf[T] => acc + 1
-            case _ => helper(acc, head.leftChild :: head.rightChild :: tail)
-          }
-      }
-    }
-    helper(0, List(tree))
-  }
-}
-
-private[knn]
 case object Empty extends Tree[Nothing] {
   override val leftChild = this
   override val rightChild = this
   override val size = 0
+  override val leafCount = 0
   override val pivot = new VectorWithNorm(Vectors.dense(Array.empty[Double]), 0.0)
   override val radius = 0.0
 
@@ -89,15 +73,18 @@ case class Leaf[T] (data: IndexedSeq[(VectorWithNorm, T)],
   override val leftChild = Empty[T]
   override val rightChild = Empty[T]
   override val size = data.size
+  override val leafCount = 1
 
   override def iterator: Iterator[(Vector, T)] = data.iterator.map{ case (k, v) => (k.vector, v) }
 
   override def query(candidates: KNNCandidates[T]): KNNCandidates[T] = {
-    data
+    val sorted = data
       .map{ case (k, v) => ((k, v), candidates.queryVector.fastDistance(k)) }
       .sortBy(_._2)
-      .takeWhile { case(_, d) => candidates.notFull ||  d < candidates.maxDistance }
-      .foreach { case(v, _) => candidates.insert(v) }
+
+    for((v, d) <- sorted if candidates.notFull ||  d < candidates.maxDistance)
+      candidates.insert(v)
+
     candidates
   }
 }
@@ -126,6 +113,7 @@ case class MetricNode[T](leftChild: Tree[T],
                          radius: Double
                           ) extends Tree[T] {
   override val size = leftChild.size + rightChild.size
+  override val leafCount = leftChild.leafCount + rightChild.leafCount
 
   override def iterator: Iterator[(Vector, T)] = leftChild.iterator ++ rightChild.iterator
   override def query(candidates: KNNCandidates[T]): KNNCandidates[T] = {

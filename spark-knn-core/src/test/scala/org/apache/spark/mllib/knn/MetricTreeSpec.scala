@@ -15,6 +15,9 @@ class MetricTreeSpec extends FunSpec with Matchers {
       it("should return empty when queried") {
         tree.query(origin) shouldBe empty
       }
+      it("should have zero leaf") {
+        tree.leafCount shouldBe 0
+      }
     }
 
     describe("without duplicates") {
@@ -22,11 +25,9 @@ class MetricTreeSpec extends FunSpec with Matchers {
       List(1, data.size / 2, data.size, data.size * 2).foreach {
         leafSize =>
           describe(s"with leafSize of $leafSize") {
-            val tree = MetricTree.create(data)
-            import tree._
+            val tree = MetricTree.create(data, leafSize)
             it("should have correct size") {
               tree.size shouldBe data.size
-              (leftChild.size + rightChild.size) shouldBe tree.size
             }
             it("should return an iterator that goes through all data points") {
               tree.iterator.toIterable should contain theSameElementsAs data
@@ -44,6 +45,9 @@ class MetricTreeSpec extends FunSpec with Matchers {
               )
               tree.query(origin, 9).map(_._1).toSet should contain theSameElementsAs
                 (-1 to 1).flatMap(i => (-1 to 1).map(j => Vectors.dense(i, j)))
+            }
+            it("should have correct number of leaves") {
+              tree.leafCount shouldBe (tree.size / leafSize.toDouble).ceil
             }
           }
       }
