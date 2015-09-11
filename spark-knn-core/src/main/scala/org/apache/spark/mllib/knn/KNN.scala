@@ -39,7 +39,7 @@ class KNNPartitioner[T](tree: Tree[T]) extends Partitioner {
     tree match {
       case node: MetricNode[T] =>
         val leftDistance = node.leftPivot.fastSquaredDistance(v)
-        val rightDistance = node.leftPivot.fastSquaredDistance(v)
+        val rightDistance = node.rightPivot.fastSquaredDistance(v)
         if(leftDistance < rightDistance) {
           searchIndex(v, node.leftChild, acc)
         } else {
