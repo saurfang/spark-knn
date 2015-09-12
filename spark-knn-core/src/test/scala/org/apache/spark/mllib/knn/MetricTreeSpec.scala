@@ -53,9 +53,23 @@ class MetricTreeSpec extends FunSpec with Matchers {
       }
     }
 
+    describe("with duplicates") {
+      val data = (Vectors.dense(2.0, 0.0) +: Array.fill(5)(Vectors.dense(0.0, 1.0))).map(hasVector.apply)
+      val tree = MetricTree(data)
+      it("should have 2 leaves") {
+        tree.leafCount shouldBe 2
+      }
+      it("should return all available duplicated candidates") {
+        val res = tree.query(origin, 5).map(_.vector)
+        res.size shouldBe 5
+        res.toSet should contain theSameElementsAs Array(Vectors.dense(0.0, 1.0))
+      }
+    }
+
     describe("for other corner cases") {
       it("queryCost should work on Empty") {
         Empty.queryCost(new KNNCandidates(new VectorWithNorm(origin, 0), 1)) shouldBe 0
+        Empty.queryCost(new VectorWithNorm(origin, 0)) shouldBe 0
       }
     }
   }
