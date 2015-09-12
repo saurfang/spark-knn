@@ -9,7 +9,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.Random
 
-private[knn] abstract class Tree[T] extends Serializable {
+private[knn] abstract class Tree[T <: hasVector] extends Serializable {
   val leftChild: Tree[T]
   val rightChild: Tree[T]
   val size: Int
@@ -17,7 +17,7 @@ private[knn] abstract class Tree[T] extends Serializable {
   val pivot: VectorWithNorm
   val radius: Double
 
-  def iterator: Iterator[(Vector, T)]
+  def iterator: Iterator[T]
 
   /**
    * k-NN query using pre-built [[Tree]]
@@ -25,8 +25,8 @@ private[knn] abstract class Tree[T] extends Serializable {
    * @param k number of nearest neighbor
    * @return a list of neighbor that is nearest to the query vector
    */
-  def query(v: Vector, k: Int = 1): Iterable[(Vector, T)] = query(new VectorWithNorm(v), k)
-  def query(v: VectorWithNorm, k: Int): Iterable[(Vector, T)] = query(new KNNCandidates[T](v, k)).toIterable
+  def query(v: Vector, k: Int = 1): Iterable[T] = query(new VectorWithNorm(v), k)
+  def query(v: VectorWithNorm, k: Int): Iterable[T] = query(new KNNCandidates[T](v, k)).toIterable
 
   /**
    * Refine k-NN candidates using data in this [[Tree]]
@@ -61,13 +61,13 @@ case object Empty extends Tree[Nothing] {
   override val pivot = new VectorWithNorm(Vectors.dense(Array.empty[Double]), 0.0)
   override val radius = 0.0
 
-  override def iterator: Iterator[(Vector, Nothing)] = Iterator.empty
+  override def iterator: Iterator[Nothing] = Iterator.empty
   override def query(candidates: KNNCandidates[Nothing]): KNNCandidates[Nothing] = candidates
-  def apply[T]: Tree[T] = this.asInstanceOf[Tree[T]]
+  def apply[T <: hasVector]: Tree[T] = this.asInstanceOf[Tree[T]]
 }
 
 private[knn]
-case class Leaf[T] (data: IndexedSeq[(VectorWithNorm, T)],
+case class Leaf[T <: hasVector] (data: IndexedSeq[T],
                     pivot: VectorWithNorm,
                     radius: Double) extends Tree[T] {
   override val leftChild = Empty[T]
@@ -75,11 +75,11 @@ case class Leaf[T] (data: IndexedSeq[(VectorWithNorm, T)],
   override val size = data.size
   override val leafCount = 1
 
-  override def iterator: Iterator[(Vector, T)] = data.iterator.map{ case (k, v) => (k.vector, v) }
+  override def iterator: Iterator[T] = data.iterator
 
   override def query(candidates: KNNCandidates[T]): KNNCandidates[T] = {
     val sorted = data
-      .map{ case (k, v) => ((k, v), candidates.queryVector.fastDistance(k)) }
+      .map{ v => (v, candidates.queryVector.fastDistance(v.vectorWithNorm)) }
       .sortBy(_._2)
 
     for((v, d) <- sorted if candidates.notFull ||  d < candidates.maxDistance)
@@ -91,11 +91,10 @@ case class Leaf[T] (data: IndexedSeq[(VectorWithNorm, T)],
 
 private[knn]
 object Leaf {
-  def apply[T](data: IndexedSeq[(VectorWithNorm, T)]): Leaf[T] = {
-    val vectors = data.map(_._1.vector.toBreeze)
-    val (minV, maxV) = data.foldLeft((vectors.head, vectors.head)) {
-      case ((accMin, accMax), v) =>
-        val bv = v._1.vector.toBreeze
+  def apply[T <: hasVector](data: IndexedSeq[T]): Leaf[T] = {
+    val vectors = data.map(_.vector.toBreeze)
+    val (minV, maxV) = vectors.foldLeft((vectors.head, vectors.head)) {
+      case ((accMin, accMax), bv) =>
         (min(accMin, bv), max(accMax, bv))
     }
     val pivot = new VectorWithNorm((minV + maxV) / 2.0)
@@ -105,7 +104,7 @@ object Leaf {
 }
 
 private[knn]
-case class MetricNode[T](leftChild: Tree[T],
+case class MetricNode[T <: hasVector](leftChild: Tree[T],
                          leftPivot: VectorWithNorm,
                          rightChild: Tree[T],
                          rightPivot: VectorWithNorm,
@@ -115,7 +114,7 @@ case class MetricNode[T](leftChild: Tree[T],
   override val size = leftChild.size + rightChild.size
   override val leafCount = leftChild.leafCount + rightChild.leafCount
 
-  override def iterator: Iterator[(Vector, T)] = leftChild.iterator ++ rightChild.iterator
+  override def iterator: Iterator[T] = leftChild.iterator ++ rightChild.iterator
   override def query(candidates: KNNCandidates[T]): KNNCandidates[T] = {
     lazy val leftQueryCost = leftChild.queryCost(candidates)
     lazy val rightQueryCost = rightChild.queryCost(candidates)
@@ -140,10 +139,6 @@ case class MetricNode[T](leftChild: Tree[T],
 }
 
 object MetricTree {
-  def create[T](data: IndexedSeq[(Vector, T)], leafSize: Int = 1, rand: Random = new Random): Tree[T] = {
-    apply(data.map{ case (k, v) => (new VectorWithNorm(k), v)}, leafSize, rand)
-  }
-
   /**
    * Build a [[Tree]] that facilitate k-NN query
    *
@@ -151,24 +146,24 @@ object MetricTree {
    * @param rand random number generator used in pivot point selecting
    * @return a [[Tree]] can be used to do k-NN query
    */
-  def apply[T](data: IndexedSeq[(VectorWithNorm, T)], leafSize: Int, rand: Random): Tree[T] = {
+  def apply[T <: hasVector](data: IndexedSeq[T], leafSize: Int = 1, rand: Random = new Random): Tree[T] = {
     val size = data.size
     if(size == 0) {
       Empty[T]
     } else if(size <= leafSize) {
       Leaf(data)
     } else {
-      val randomPivot = data(rand.nextInt(size))._1
-      val leftPivot = data.maxBy(v => randomPivot.fastSquaredDistance(v._1))._1
+      val randomPivot = data(rand.nextInt(size)).vectorWithNorm
+      val leftPivot = data.maxBy(v => randomPivot.fastSquaredDistance(v.vectorWithNorm)).vectorWithNorm
       if(leftPivot == randomPivot) {
         // all points are identical (including only one point left)
         Leaf(data, randomPivot, 0.0)
       } else {
-        val rightPivot = data.maxBy(v => leftPivot.fastSquaredDistance(v._1))._1
+        val rightPivot = data.maxBy(v => leftPivot.fastSquaredDistance(v.vectorWithNorm)).vectorWithNorm
         val pivot = new VectorWithNorm(Vectors.fromBreeze((leftPivot.vector.toBreeze + rightPivot.vector.toBreeze) / 2.0))
-        val radius = data.maxBy(v => pivot.fastSquaredDistance(v._1))._1.fastDistance(pivot)
+        val radius = data.maxBy(v => pivot.fastSquaredDistance(v.vectorWithNorm)).vectorWithNorm.fastDistance(pivot)
         val (leftPartition, rightPartition) = data.partition{
-          v => leftPivot.fastSquaredDistance(v._1) < rightPivot.fastSquaredDistance(v._1)
+          v => leftPivot.fastSquaredDistance(v.vectorWithNorm) < rightPivot.fastSquaredDistance(v.vectorWithNorm)
         }
 
         MetricNode(
@@ -191,32 +186,18 @@ object MetricTree {
 //}
 
 private[knn]
-class VectorWithNorm(val vector: Vector, val norm: Double) extends Serializable {
-
-  def this(vector: Vector) = this(vector, Vectors.norm(vector, 2.0))
-  def this(vector: breeze.linalg.Vector[Double]) = this(Vectors.fromBreeze(vector))
-
-  def fastSquaredDistance(v: VectorWithNorm): Double = {
-    MLUtils.fastSquaredDistance(vector, norm, v.vector, v.norm)
-  }
-  def fastDistance(v: VectorWithNorm): Double = math.sqrt(fastSquaredDistance(v))
-
-  override def toString: String = s"$vector ($norm)"
-}
-
-private[knn]
-class KNNCandidates[T](val queryVector: VectorWithNorm, val k: Int) extends Serializable {
+class KNNCandidates[T <: hasVector](val queryVector: VectorWithNorm, val k: Int) extends Serializable {
   private[this] var _distance: Double = _
-  private[this] val candidates = mutable.PriorityQueue.empty[(VectorWithNorm, T)] {
-    Ordering.by(x => queryVector.fastSquaredDistance(x._1))
+  private[this] val candidates = mutable.PriorityQueue.empty[T] {
+    Ordering.by(x => queryVector.fastSquaredDistance(x.vectorWithNorm))
   }
 
   def maxDistance: Double = _distance
-  def insert(v: (VectorWithNorm, T)*): Unit = {
+  def insert(v: T*): Unit = {
     while(candidates.size > k - v.size) candidates.dequeue()
     candidates.enqueue(v: _*)
-    _distance = candidates.head._1.fastDistance(queryVector)
+    _distance = candidates.head.vectorWithNorm.fastDistance(queryVector)
   }
-  def toIterable: Iterable[(Vector, T)] = candidates.map{case (key, value) => (key.vector, value) }
+  def toIterable: Iterable[T] = candidates
   def notFull: Boolean = candidates.size < k
 }
