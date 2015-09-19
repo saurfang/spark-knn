@@ -83,7 +83,7 @@ case class Leaf[T <: hasVector] (data: IndexedSeq[T],
       .sortBy(_._2)
 
     for((v, d) <- sorted if candidates.notFull ||  d < candidates.maxDistance)
-      candidates.insert(v)
+      candidates.insert(v, d)
 
     candidates
   }
@@ -187,17 +187,16 @@ object MetricTree {
 
 private[knn]
 class KNNCandidates[T <: hasVector](val queryVector: VectorWithNorm, val k: Int) extends Serializable {
-  private[this] var _distance: Double = _
-  private[this] val candidates = mutable.PriorityQueue.empty[T] {
-    Ordering.by(x => queryVector.fastSquaredDistance(x.vectorWithNorm))
+  private val candidates = mutable.PriorityQueue.empty[(T, Double)] {
+    Ordering.by(_._2)
   }
 
-  def maxDistance: Double = _distance
-  def insert(v: T*): Unit = {
-    while(candidates.size > k - v.size) candidates.dequeue()
-    candidates.enqueue(v: _*)
-    _distance = candidates.head.vectorWithNorm.fastDistance(queryVector)
+  def maxDistance: Double = if(candidates.isEmpty) 0.0 else candidates.head._2
+  def insert(v: T, d: Double): Unit = {
+    while(candidates.size >= k) candidates.dequeue()
+    candidates.enqueue((v, d))
   }
-  def toIterable: Iterable[T] = candidates
+  def insert(v: T): Unit = insert(v, v.vectorWithNorm.fastDistance(queryVector))
+  def toIterable: Iterable[T] = candidates.map(_._1)
   def notFull: Boolean = candidates.size < k
 }
