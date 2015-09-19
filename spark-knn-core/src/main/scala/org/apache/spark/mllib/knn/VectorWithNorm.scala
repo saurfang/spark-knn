@@ -10,6 +10,15 @@ import org.apache.spark.mllib.util.MLUtils
 trait hasVector extends Serializable {
   def vector: Vector
 
+  override def equals(o: Any) = o match {
+    case that: hasVector => vector.equals(that.vector)
+    case _ => false
+  }
+
+  override def hashCode = vector.hashCode()
+
+  override def toString = vectorWithNorm.toString()
+
   @transient lazy private[knn] val vectorWithNorm: VectorWithNorm = new VectorWithNorm(vector)
 }
 
