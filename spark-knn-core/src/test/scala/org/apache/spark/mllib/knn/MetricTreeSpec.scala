@@ -8,7 +8,7 @@ class MetricTreeSpec extends FunSpec with Matchers {
   describe("MetricTree") {
     val origin = Vectors.dense(0, 0)
     describe("can be constructed with empty data") {
-      val tree = MetricTree(IndexedSeq.empty[hasVector])
+      val tree = MetricTree.build(IndexedSeq.empty[hasVector])
       it("iterator should be empty") {
         tree.iterator shouldBe empty
       }
@@ -25,7 +25,7 @@ class MetricTreeSpec extends FunSpec with Matchers {
       List(1, data.size / 2, data.size, data.size * 2).foreach {
         leafSize =>
           describe(s"with leafSize of $leafSize") {
-            val tree = MetricTree(data, leafSize)
+            val tree = MetricTree.build(data, leafSize)
             it("should have correct size") {
               tree.size shouldBe data.size
             }
@@ -55,7 +55,7 @@ class MetricTreeSpec extends FunSpec with Matchers {
 
     describe("with duplicates") {
       val data = (Vectors.dense(2.0, 0.0) +: Array.fill(5)(Vectors.dense(0.0, 1.0))).map(hasVector.apply)
-      val tree = MetricTree(data)
+      val tree = MetricTree.build(data)
       it("should have 2 leaves") {
         tree.leafCount shouldBe 2
       }

@@ -17,18 +17,24 @@ class KNN (val topTreeSize: Int,
 
   def run[T <: hasVector : ClassTag](data: RDD[T]): KNNRDD[T] = {
     val sampled = data.sample(false, topTreeSize / data.count()).collect()
-    val topTree = MetricTree(sampled, topTreeLeafSize)
+    val topTree = MetricTree.build(sampled, topTreeLeafSize)
     val part = new KNNPartitioner(topTree)
     val repartitioned = new ShuffledRDD[VectorWithNorm, T, T](data.map(x => (x.vectorWithNorm, x)), part)
     val trees = repartitioned.mapPartitions{
       itr =>
-        val childTree = MetricTree(itr.map(_._2).toIndexedSeq)
+        val childTree = MetricTree.build(itr.map(_._2).toIndexedSeq)
         Iterator(childTree)
     }
     new KNNRDD[T](topTree, trees)
   }
 }
 
+/**
+ * Partitioner used to map vector to leaf node which determines the partition it goes to
+ *
+ * @param tree [[MetricTree]] used to find leaf
+ * @tparam T
+ */
 class KNNPartitioner[T <: hasVector](tree: Tree[T]) extends Partitioner {
   override def numPartitions: Int = tree.leafCount
 
@@ -42,7 +48,7 @@ class KNNPartitioner[T <: hasVector](tree: Tree[T]) extends Partitioner {
   @tailrec
   private[this] def searchIndex(v: VectorWithNorm, tree: Tree[T] = tree, acc: Int = 0): Int = {
     tree match {
-      case node: MetricNode[T] =>
+      case node: MetricTree[T] =>
         val leftDistance = node.leftPivot.fastSquaredDistance(v)
         val rightDistance = node.rightPivot.fastSquaredDistance(v)
         if(leftDistance < rightDistance) {
@@ -50,7 +56,7 @@ class KNNPartitioner[T <: hasVector](tree: Tree[T]) extends Partitioner {
         } else {
           searchIndex(v, node.rightChild, acc + node.leftChild.leafCount)
         }
-      case _ => acc
+      case _ => acc // reached leaf
     }
   }
 }
