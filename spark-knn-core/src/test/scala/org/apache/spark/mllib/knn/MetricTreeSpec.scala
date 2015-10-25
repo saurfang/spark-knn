@@ -49,6 +49,18 @@ class MetricTreeSpec extends FunSpec with Matchers {
             it("should have correct number of leaves") {
               tree.leafCount shouldBe (tree.size / leafSize.toDouble).ceil
             }
+            it("all points should fall with radius of pivot") {
+              def check(tree: Tree[hasVector]): Unit = {
+                tree.iterator.foreach(_.vectorWithNorm.fastDistance(tree.pivot) <= tree.radius)
+                tree match {
+                  case t: MetricTree[hasVector] =>
+                    check(t.leftChild)
+                    check(t.rightChild)
+                  case _ =>
+                }
+              }
+              check(tree)
+            }
           }
       }
     }

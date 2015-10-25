@@ -182,7 +182,7 @@ object MetricTree {
       } else {
         val rightPivot = data.maxBy(v => leftPivot.fastSquaredDistance(v.vectorWithNorm)).vectorWithNorm
         val pivot = new VectorWithNorm(Vectors.fromBreeze((leftPivot.vector.toBreeze + rightPivot.vector.toBreeze) / 2.0))
-        val radius = data.map(v => pivot.fastSquaredDistance(v.vectorWithNorm)).max
+        val radius = math.sqrt(data.map(v => pivot.fastSquaredDistance(v.vectorWithNorm)).max)
         val (leftPartition, rightPartition) = data.partition{
           v => leftPivot.fastSquaredDistance(v.vectorWithNorm) < rightPivot.fastSquaredDistance(v.vectorWithNorm)
         }
@@ -218,21 +218,30 @@ case class SpillTree[T <: hasVector](leftChild: Tree[T],
                                       rightPivot: VectorWithNorm,
                                       pivot: VectorWithNorm,
                                       radius: Double,
-                                      tau: Double
+                                      tau: Double,
+                                      bufferSize: Int
                                        ) extends Tree[T] {
-  override val size = leftChild.size + rightChild.size
+  override val size = leftChild.size + rightChild.size - bufferSize
   override val leafCount = leftChild.leafCount + rightChild.leafCount
 
-  override def iterator: Iterator[T] = leftChild.iterator ++ rightChild.iterator
+  override def iterator: Iterator[T] =
+    leftChild.iterator ++ rightChild.iterator.filter {
+      p => p.vectorWithNorm.fastDistance(leftPivot) - p.vectorWithNorm.fastDistance(rightPivot) > 2 * tau
+    }
+
   override def query(candidates: KNNCandidates[T]): KNNCandidates[T] = {
     lazy val leftQueryCost = leftChild.queryCost(candidates)
     lazy val rightQueryCost = rightChild.queryCost(candidates)
-    // only query if at least one of the children is worth looking
-    if(candidates.notFull || leftQueryCost < leftChild.radius || rightQueryCost < rightChild.radius ){
+    // because of defeatist search, if we are queried then candidates must be empty
+    if (size <= candidates.k) {
+      println("insert all")
+      iterator.foreach(candidates.insert)
+    } else {
+      println("descend to child")
       (if (leftQueryCost <= rightQueryCost) leftChild else rightChild).query(candidates)
       //TODO: Should we search the remaining child if candidates have not been filled?
-      // This is non-trivial because the children of the remaining child has no knowledge
-      // what's in the buffer. If we assume there is no duplicate then yes it becomes doable.
+      // This is expensive as we need to iterate all right child and determine if it is not in
+      // buffer and eligible to become a beighbor
     }
     candidates
   }
@@ -263,12 +272,12 @@ object SpillTree {
       } else {
         val rightPivot = data.maxBy(v => leftPivot.fastSquaredDistance(v.vectorWithNorm)).vectorWithNorm
         val pivot = new VectorWithNorm(Vectors.fromBreeze((leftPivot.vector.toBreeze + rightPivot.vector.toBreeze) / 2.0))
-        val radius = data.map(v => pivot.fastSquaredDistance(v.vectorWithNorm)).max
+        val radius = math.sqrt(data.map(v => pivot.fastSquaredDistance(v.vectorWithNorm)).max)
         val dataWithDistance = data.map(v =>
-          (v, leftPivot.fastSquaredDistance(v.vectorWithNorm), rightPivot.fastSquaredDistance(v.vectorWithNorm))
+          (v, leftPivot.fastDistance(v.vectorWithNorm), rightPivot.fastDistance(v.vectorWithNorm))
         )
-        val leftPartition = dataWithDistance.filter { case (_, left, right) => left - right < 2 * tau }.map(_._1)
-        val rightPartition = dataWithDistance.filter { case (_, left, right) => right - left < 2 * tau }.map(_._1)
+        val leftPartition = dataWithDistance.filter { case (_, left, right) => left - right <= 2 * tau }.map(_._1)
+        val rightPartition = dataWithDistance.filter { case (_, left, right) => right - left <= 2 * tau }.map(_._1)
 
         SpillTree(
           build(leftPartition, leafSize, rand, tau),
@@ -277,7 +286,8 @@ object SpillTree {
           rightPivot,
           pivot,
           radius,
-          tau
+          tau,
+          leftPartition.size + rightPartition.size - size
         )
       }
     }
@@ -313,13 +323,13 @@ object HybridTree {
       } else {
         val rightPivot = data.maxBy(v => leftPivot.fastSquaredDistance(v.vectorWithNorm)).vectorWithNorm
         val pivot = new VectorWithNorm(Vectors.fromBreeze((leftPivot.vector.toBreeze + rightPivot.vector.toBreeze) / 2.0))
-        val radius = data.map(v => pivot.fastSquaredDistance(v.vectorWithNorm)).max
+        val radius = math.sqrt(data.map(v => pivot.fastSquaredDistance(v.vectorWithNorm)).max)
         val dataWithDistance = data.map(v =>
           (v, leftPivot.fastDistance(v.vectorWithNorm), rightPivot.fastDistance(v.vectorWithNorm))
         )
         // implemented boundary is parabola (rather than perpendicular plane described in the paper)
-        val leftPartition = dataWithDistance.filter { case (_, left, right) => left - right < 2 * tau }.map(_._1)
-        val rightPartition = dataWithDistance.filter { case (_, left, right) => right - left < 2 * tau }.map(_._1)
+        val leftPartition = dataWithDistance.filter { case (_, left, right) => left - right <= 2 * tau }.map(_._1)
+        val rightPartition = dataWithDistance.filter { case (_, left, right) => right - left <= 2 * tau }.map(_._1)
 
         if(leftPartition.size > size * rho || rightPartition.size > size * rho) {
           //revert back to metric node
@@ -342,7 +352,8 @@ object HybridTree {
             rightPivot,
             pivot,
             radius,
-            tau
+            tau,
+            leftPartition.size + rightPartition.size - size
           )
         }
       }
@@ -360,7 +371,7 @@ object HybridTree {
  */
 private[knn]
 class KNNCandidates[T <: hasVector](val queryVector: VectorWithNorm, val k: Int) extends Serializable {
-  private val candidates = mutable.PriorityQueue.empty[(T, Double)] {
+  private[knn] val candidates = mutable.PriorityQueue.empty[(T, Double)] {
     Ordering.by(_._2)
   }
 
