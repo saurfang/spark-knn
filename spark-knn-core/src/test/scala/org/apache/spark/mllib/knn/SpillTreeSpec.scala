@@ -36,6 +36,10 @@ class SpillTreeSpec extends FunSpec with Matchers {
         it("works for every point to identify itself") {
           points.foreach(v => tree.query(v.vector).head shouldBe v)
         }
+        it("can return more than min leaf size") {
+          val k = leafSize + 5
+          points.foreach(v => tree.query(v.vector, k).size shouldBe k)
+        }
       }
       describe("built with tau = 0.4") {
         val tree = SpillTree.build(points, leafSize = leafSize , tau = 0.4)
@@ -89,19 +93,6 @@ class SpillTreeSpec extends FunSpec with Matchers {
       }
       it("should return an iterator that goes through all data points") {
         tree.iterator.toIterable should contain theSameElementsAs points
-      }
-      it("has consistent size and iterator") {
-        def check(tree: Tree[hasVector]): Unit = {
-          tree match {
-            case t: SpillTree[hasVector] =>
-              t.iterator.size shouldBe t.size
-
-              check(t.leftChild)
-              check(t.rightChild)
-            case _ =>
-          }
-        }
-        check(tree)
       }
     }
   }

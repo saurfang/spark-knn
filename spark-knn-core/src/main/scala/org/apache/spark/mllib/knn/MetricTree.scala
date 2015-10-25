@@ -208,8 +208,6 @@ object MetricTree {
  *
  * Search doesn't do backtracking but rather adopt a defeatist search where it search the most prominent
  * child and that child only. The buffer ensures such strategy doesn't result in a poor outcome.
- *
- * TODO: Verify double counting data in buffer for size and iterator makes sense
  */
 private[knn]
 case class SpillTree[T <: hasVector](leftChild: Tree[T],
@@ -225,26 +223,34 @@ case class SpillTree[T <: hasVector](leftChild: Tree[T],
   override val leafCount = leftChild.leafCount + rightChild.leafCount
 
   override def iterator: Iterator[T] =
-    leftChild.iterator ++ rightChild.iterator.filter {
-      p => p.vectorWithNorm.fastDistance(leftPivot) - p.vectorWithNorm.fastDistance(rightPivot) > 2 * tau
-    }
+    leftChild.iterator ++ rightChild.iterator.filter(childFilter(leftPivot, rightPivot))
 
   override def query(candidates: KNNCandidates[T]): KNNCandidates[T] = {
-    lazy val leftQueryCost = leftChild.queryCost(candidates)
-    lazy val rightQueryCost = rightChild.queryCost(candidates)
     // because of defeatist search, if we are queried then candidates must be empty
     if (size <= candidates.k) {
-      println("insert all")
       iterator.foreach(candidates.insert)
     } else {
-      println("descend to child")
+      val leftQueryCost = leftChild.queryCost(candidates)
+      val rightQueryCost = rightChild.queryCost(candidates)
+
       (if (leftQueryCost <= rightQueryCost) leftChild else rightChild).query(candidates)
-      //TODO: Should we search the remaining child if candidates have not been filled?
-      // This is expensive as we need to iterate all right child and determine if it is not in
-      // buffer and eligible to become a beighbor
+
+      // fill candidates with points from other child excluding buffer so we don't double count.
+      // depending on K and how high we are in the tree, this can be very expensive and undesirable
+      // TODO: revisit this idea when we do large scale testing
+      if(candidates.notFull) {
+        (if (leftQueryCost <= rightQueryCost) {
+          rightChild.iterator.filter(childFilter(leftPivot, rightPivot))
+        } else {
+          leftChild.iterator.filter(childFilter(rightPivot, leftPivot))
+        }).foreach(candidates.tryInsert)
+      }
     }
     candidates
   }
+
+  private[this] val childFilter: (VectorWithNorm, VectorWithNorm) => T => Boolean =
+    (p1, p2) => p => p.vectorWithNorm.fastDistance(p1) - p.vectorWithNorm.fastDistance(p2) > 2 * tau
 }
 
 
@@ -385,6 +391,10 @@ class KNNCandidates[T <: hasVector](val queryVector: VectorWithNorm, val k: Int)
     candidates.enqueue((v, d))
   }
   def insert(v: T): Unit = insert(v, v.vectorWithNorm.fastDistance(queryVector))
+  def tryInsert(v: T): Unit = {
+    val distance = v.vectorWithNorm.fastDistance(queryVector)
+    if(notFull || distance < maxDistance) insert(v, distance)
+  }
   def toIterable: Iterable[T] = candidates.map(_._1)
   def notFull: Boolean = candidates.size < k
 }
