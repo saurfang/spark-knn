@@ -50,7 +50,6 @@ class KNN (val topTreeSize: Int,
       .map {
       case (index, points) => (points.size, computeAverageDistance(points))
     }.collect().distinct
-    logInfo(estimators.toSeq.toString)
 
     val x = DenseVector(estimators.map{ case(n, _) => math.log(n)})
     val y = DenseVector(estimators.map{ case(_, d) => math.log(d)})
@@ -66,8 +65,7 @@ class KNN (val topTreeSize: Int,
     val alpha = ymean - beta * xmean
     val rs = math.exp(alpha + beta * math.log(total))
 
-    val d = - 1 / beta
-    rs / math.sqrt(d) / 2
+    rs / math.sqrt(- 1 / beta) / 2
   }
 
   private[this] def computeAverageDistance(points: Iterable[VectorWithNorm]): Double = {
