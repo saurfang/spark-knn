@@ -9,6 +9,6 @@ lazy val core = knnProject("spark-knn-core").
 
 lazy val examples = knnProject("spark-knn-examples").
   dependsOn(core).
-  settings(fork in run := true).
+  settings(fork in run := true, coverageExcludedPackages := ".*examples.*").
   settings(Dependencies.examples).
   settings(SparkSubmit.settings: _*)
