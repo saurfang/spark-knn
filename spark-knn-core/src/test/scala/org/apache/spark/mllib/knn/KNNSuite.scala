@@ -11,8 +11,6 @@ class KNNSuite extends FunSuite with SharedSparkContext with Matchers {
     val leafSize = 5
     val knn = new KNN(data.size / 10, leafSize, leafSize)
     val knnRDD = knn.run(sc.parallelize(data)).cache()
-    //it("should only have one element in each partition") {
-    knnRDD.mapPartitions(itr => Iterator(itr.size)).collect().foreach(_ should be <= leafSize)
     //it("should contain all input data") {
     knnRDD.collect().map(_.vector) should contain theSameElementsAs data
     //it("should return itself when queried with nearest neighbor")
