@@ -22,7 +22,7 @@ class KNN (val topTreeSize: Int,
   }
 
   def run[T <: hasVector : ClassTag](data: RDD[T]): KNNRDD[T] = {
-    val sampled = data.sample(false, topTreeSize / data.count()).collect()
+    val sampled = data.sample(false, topTreeSize.toDouble / data.count()).collect()
     val topTree = MetricTree.build(sampled, topTreeLeafSize)
     val part = new KNNPartitioner(topTree)
     val repartitioned = new ShuffledRDD[VectorWithNorm, T, T](data.map(x => (x.vectorWithNorm, x)), part)
@@ -38,7 +38,7 @@ class KNN (val topTreeSize: Int,
     new KNNRDD[T](topTree, _tau, trees)
   }
 
-  def estimateTau[T <: hasVector](data: RDD[T], sampleSize: Seq[Int] = 100 to 10000 by 50): Double = {
+  def estimateTau[T <: hasVector](data: RDD[T], sampleSize: Seq[Int] = 100 to 1000 by 10): Double = {
     val total = data.count().toDouble
 
     val estimators = data.flatMap {

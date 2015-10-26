@@ -8,7 +8,7 @@ object Dependencies {
   )
 
   object Compile {
-    val spark = "org.apache.spark" %% "spark-mllib" % "1.5.0" % "provided"
+    val spark = "org.apache.spark" %% "spark-mllib" % "1.5.1" % "provided"
     val breeze_natives = "org.scalanlp" %% "breeze-natives" % "0.11.2" % "provided"
 
     object Test {

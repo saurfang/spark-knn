@@ -5,7 +5,7 @@ object SparkSubmit {
     SparkSubmitSetting("sparkMNIST",
       Seq(
         "--master", "local[3]",
-        "--class", "com.github.saurfang.spark.tsne.examples.MNIST"
+        "--class", "com.github.saurfang.spark.mllib.knn.examples.MNIST"
       )
     )
 }
