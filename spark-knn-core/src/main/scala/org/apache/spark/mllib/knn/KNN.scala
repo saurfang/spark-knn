@@ -28,6 +28,7 @@ class KNN (val topTreeSize: Int,
     val repartitioned = new ShuffledRDD[VectorWithNorm, T, T](data.map(x => (x.vectorWithNorm, x)), part)
 
     val _tau = tau.getOrElse(estimateTau(data))
+    logInfo("Tau is: " + _tau)
     val trees = repartitioned.mapPartitions{
       itr =>
         val childTree = HybridTree.build(itr.map(_._2).toIndexedSeq, subTreeLeafSize, tau = _tau)
@@ -48,29 +49,29 @@ class KNN (val topTreeSize: Int,
       .groupByKey()
       .map {
       case (index, points) => (points.size, computeAverageDistance(points))
-    }
+    }.collect().distinct
+    logInfo(estimators.toSeq.toString)
 
-    val dimensions = data.first().vector.size
-    val x = DenseVector(estimators.map{ case(n, _) => math.log(math.pow(n, 1.0 / dimensions))}.collect())
-    val y = DenseVector(estimators.map{ case(_, d) => math.log(d)}.collect())
+    val x = DenseVector(estimators.map{ case(n, _) => math.log(n)})
+    val y = DenseVector(estimators.map{ case(_, d) => math.log(d)})
 
-    val xMeanVariance = meanAndVariance(x)
+    val xMeanVariance: MeanAndVariance = meanAndVariance(x)
     val xmean = xMeanVariance.mean
-    val yMeanVariance = meanAndVariance(y)
+    val yMeanVariance: MeanAndVariance = meanAndVariance(y)
     val ymean = yMeanVariance.mean
 
-    val corr = (mean(x :* y) - xmean - ymean) / math.sqrt((mean(x :* x) - xmean * xmean) * (mean(y :* y) - ymean * ymean))
+    val corr = (mean(x :* y) - xmean * ymean) / math.sqrt((mean(x :* x) - xmean * xmean) * (mean(y :* y) - ymean * ymean))
 
     val beta = corr * yMeanVariance.stdDev / xMeanVariance.stdDev
     val alpha = ymean - beta * xmean
+    val rs = math.exp(alpha + beta * math.log(total))
 
-    val rs = math.exp(alpha + beta * math.pow(total, 1.0 / dimensions))
-
-    rs / math.sqrt(dimensions) / 2
+    val d = - 1 / beta
+    rs / math.sqrt(d) / 2
   }
 
   private[this] def computeAverageDistance(points: Iterable[VectorWithNorm]): Double = {
-    val distances = points.map(point => points.map(point.fastSquaredDistance).min).map(math.sqrt)
+    val distances = points.map(point => points.map(point.fastSquaredDistance).filter(_ > 0).min).map(math.sqrt)
     distances.sum / distances.size
   }
 }
@@ -117,7 +118,7 @@ private[knn] object KNNIndexFinder {
   }
 
   //TODO: Might want to make this tail recursive
-  def searchIndex[T <: hasVector](v: VectorWithNorm, tree: Tree[T], tau: Double, acc: Int = 0): Seq[Int] = {
+  def searchIndecies[T <: hasVector](v: VectorWithNorm, tree: Tree[T], tau: Double, acc: Int = 0): Seq[Int] = {
     tree match {
       case node: MetricTree[T] =>
         val leftDistance = node.leftPivot.fastDistance(v)
@@ -125,11 +126,11 @@ private[knn] object KNNIndexFinder {
 
         val buffer = new ArrayBuffer[Int]
         if(leftDistance - rightDistance <= 2 * tau) {
-          buffer ++= searchIndex(v, node.leftChild, tau, acc)
+          buffer ++= searchIndecies(v, node.leftChild, tau, acc)
         }
 
         if (rightDistance - leftDistance <= 2 * tau) {
-          buffer ++= searchIndex(v, node.rightChild, tau, acc + node.leftChild.leafCount)
+          buffer ++= searchIndecies(v, node.rightChild, tau, acc + node.leftChild.leafCount)
         }
 
         buffer

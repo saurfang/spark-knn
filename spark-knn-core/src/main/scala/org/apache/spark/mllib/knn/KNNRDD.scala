@@ -41,7 +41,7 @@ class KNNRDD[T <: hasVector : ClassTag] private[knn]
     // map each point to a (index, point) pair and repartition
     val searchData = data.zipWithIndex().flatMap {
       point =>
-        KNNIndexFinder.searchIndex(point._1.vectorWithNorm, rootTree, tau).map(i => (i, point))
+        KNNIndexFinder.searchIndecies(point._1.vectorWithNorm, rootTree, tau).map(i => (i, point))
     }.partitionBy(new HashPartitioner(partitions.length))
 
     // for each partition, search points within corresponding child tree
