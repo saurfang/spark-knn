@@ -21,6 +21,7 @@ import scala.reflect.ClassTag
  */
 class KNNRDD[T <: hasVector : ClassTag] private[knn]
                 (val rootTree: Tree[T],
+                 val tau: Double,
                 @transient childrenTree: RDD[Tree[T]]) extends RDD[T](childrenTree) {
 
   @DeveloperApi
@@ -37,12 +38,13 @@ class KNNRDD[T <: hasVector : ClassTag] private[knn]
   }
 
   def query(data: RDD[T], k: Int = 1): RDD[(T, Iterable[T])] = {
+    // map each point to a (index, point) pair and repartition
     val searchData = data.zipWithIndex().flatMap {
       point =>
-        //TODO: Only push to probable children tree using heuristic
-        partitions.indices.map(i => (i, point))
+        KNNIndexFinder.searchIndex(point._1.vectorWithNorm, rootTree, tau).map(i => (i, point))
     }.partitionBy(new HashPartitioner(partitions.length))
 
+    // for each partition, search points within corresponding child tree
     val results = searchData.zipPartitions(childrenTree) {
       (childData, trees) =>
         val tree = trees.next()
@@ -55,6 +57,7 @@ class KNNRDD[T <: hasVector : ClassTag] private[knn]
         }
     }
 
+    // merge results by point index together and keep topK results
     results.reduceByKey {
       case ((p1, c1), (p2, c2)) => (p1, merge(c1, c2, k))
     }.map {
@@ -62,6 +65,7 @@ class KNNRDD[T <: hasVector : ClassTag] private[knn]
     }
   }
 
+  // note: topK is not serializable
   private[this] def merge(s1: Seq[(T, Double)],
                           s2: Seq[(T, Double)],
                           k: Int): Seq[(T, Double)] = {

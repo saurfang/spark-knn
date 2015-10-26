@@ -9,7 +9,7 @@ class KNNSuite extends FunSuite with SharedSparkContext with Matchers {
   test("KNNRDD can be constructed") {
     val data = (-5 to 5).flatMap(i => (-5 to 5).map(j => Vectors.dense(i, j)))
     val leafSize = 5
-    val knn = new KNN(data.size, leafSize)
+    val knn = new KNN(data.size, leafSize, leafSize)
     val knnRDD = knn.run(sc.parallelize(data)).cache()
     //it("should only have one element in each partition") {
     knnRDD.mapPartitions(itr => Iterator(itr.size)).collect().foreach(_ should be <= leafSize)
