@@ -65,7 +65,7 @@ class KNN (val topTreeSize: Int,
     val alpha = ymean - beta * xmean
     val rs = math.exp(alpha + beta * math.log(total))
 
-    rs / math.sqrt(- 1 / beta) / 2
+    rs * 2 /// math.sqrt(- 1 / beta)
   }
 
   private[this] def computeAverageDistance(points: Iterable[VectorWithNorm]): Double = {
@@ -123,11 +123,11 @@ private[knn] object KNNIndexFinder {
         val rightDistance = node.rightPivot.fastDistance(v)
 
         val buffer = new ArrayBuffer[Int]
-        if(leftDistance - rightDistance <= 2 * tau) {
+        if(leftDistance - rightDistance <= tau) {
           buffer ++= searchIndecies(v, node.leftChild, tau, acc)
         }
 
-        if (rightDistance - leftDistance <= 2 * tau) {
+        if (rightDistance - leftDistance <= tau) {
           buffer ++= searchIndecies(v, node.rightChild, tau, acc + node.leftChild.leafCount)
         }
 

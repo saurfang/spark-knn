@@ -250,7 +250,7 @@ case class SpillTree[T <: hasVector](leftChild: Tree[T],
   }
 
   private[this] val childFilter: (VectorWithNorm, VectorWithNorm) => T => Boolean =
-    (p1, p2) => p => p.vectorWithNorm.fastDistance(p1) - p.vectorWithNorm.fastDistance(p2) > 2 * tau
+    (p1, p2) => p => p.vectorWithNorm.fastDistance(p1) - p.vectorWithNorm.fastDistance(p2) > tau
 }
 
 
@@ -282,8 +282,8 @@ object SpillTree {
         val dataWithDistance = data.map(v =>
           (v, leftPivot.fastDistance(v.vectorWithNorm), rightPivot.fastDistance(v.vectorWithNorm))
         )
-        val leftPartition = dataWithDistance.filter { case (_, left, right) => left - right <= 2 * tau }.map(_._1)
-        val rightPartition = dataWithDistance.filter { case (_, left, right) => right - left <= 2 * tau }.map(_._1)
+        val leftPartition = dataWithDistance.filter { case (_, left, right) => left - right <= tau }.map(_._1)
+        val rightPartition = dataWithDistance.filter { case (_, left, right) => right - left <= tau }.map(_._1)
 
         SpillTree(
           build(leftPartition, leafSize, rand, tau),
@@ -334,8 +334,8 @@ object HybridTree {
           (v, leftPivot.fastDistance(v.vectorWithNorm), rightPivot.fastDistance(v.vectorWithNorm))
         )
         // implemented boundary is parabola (rather than perpendicular plane described in the paper)
-        val leftPartition = dataWithDistance.filter { case (_, left, right) => left - right <= 2 * tau }.map(_._1)
-        val rightPartition = dataWithDistance.filter { case (_, left, right) => right - left <= 2 * tau }.map(_._1)
+        val leftPartition = dataWithDistance.filter { case (_, left, right) => left - right <= tau }.map(_._1)
+        val rightPartition = dataWithDistance.filter { case (_, left, right) => right - left <= tau }.map(_._1)
 
         if(leftPartition.size > size * rho || rightPartition.size > size * rho) {
           //revert back to metric node

@@ -48,6 +48,7 @@ class KNNRDD[T <: hasVector : ClassTag] private[knn]
     val results = searchData.zipPartitions(childrenTree) {
       (childData, trees) =>
         val tree = trees.next()
+        assert(!trees.hasNext)
         childData.map {
           case (_, (point, i)) =>
             val result = tree.query(point.vectorWithNorm, k).map {
@@ -60,7 +61,9 @@ class KNNRDD[T <: hasVector : ClassTag] private[knn]
     // merge results by point index together and keep topK results
     results.reduceByKey {
       case ((p1, c1), (p2, c2)) => (p1, merge(c1, c2, k))
-    }.map {
+    }
+      .sortByKey()
+      .map {
       case (i, (p, c)) => (p, c.map(_._1))
     }
   }
