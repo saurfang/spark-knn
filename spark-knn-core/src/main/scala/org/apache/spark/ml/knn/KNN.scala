@@ -204,6 +204,12 @@ class KNN (override val uid: String) extends Estimator[KNNModel] with KNNParams 
   def this() = this(Identifiable.randomUID("knn"))
 
   /** @group setParam */
+  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+
+  /** @group setParam */
+  def setK(value: Int): this.type = set(k, value)
+
+  /** @group setParam */
   def setAuxCols(value: Array[String]): this.type = set(inputCols, value)
 
   /** @group setParam */
