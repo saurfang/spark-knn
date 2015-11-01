@@ -2,6 +2,7 @@ package org.apache.spark.ml.knn
 
 import breeze.linalg.{DenseVector, Vector => BV}
 import breeze.stats._
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.knn.KNN.{VectorWithNorm, KNNPartitioner, RowWithVector}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -21,36 +22,38 @@ import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.util.hashing.byteswap64
 
+// $COVERAGE-OFF$
+
 // features column => vector, input columns => auxiliary columns to return by KNN model
 private[knn] trait KNNModelParams extends Params with HasFeaturesCol with HasInputCols {
   /**
-   * Param for the column name for returned neighbors.
-   * Default: "neighbors"
-   * @group param
-   */
+    * Param for the column name for returned neighbors.
+    * Default: "neighbors"
+    * @group param
+    */
   val neighborsCol = new Param[String](this, "neighborsCol", "column names for returned neighbors")
 
   /** @group getParam */
   def getNeighborsCol: String = $(neighborsCol)
 
   /**
-   * Param for number of neighbors to find (> 0).
-   * Default: 5
-   * @group param
-   */
+    * Param for number of neighbors to find (> 0).
+    * Default: 5
+    * @group param
+    */
   val k = new IntParam(this, "k", "number of neighbors to find", ParamValidators.gt(0))
 
   /** @group getParam */
   def getK: Int = $(k)
 
   /**
-   * Param for size of buffer used to construct spill trees and top-level tree search.
-   * Note the buffer size is 2 * tau as described in the paper.
-   * When buffer size is 0.0, the tree itself reverts to a metric tree.
-   * -1.0 triggers automatic effective nearest neighbor distance estimation.
-   * Default: -1.0
-   * @group param
-   */
+    * Param for size of buffer used to construct spill trees and top-level tree search.
+    * Note the buffer size is 2 * tau as described in the paper.
+    * When buffer size is 0.0, the tree itself reverts to a metric tree.
+    * -1.0 triggers automatic effective nearest neighbor distance estimation.
+    * Default: -1.0
+    * @group param
+    */
   val bufferSize = new DoubleParam(this, "bufferSize",
     "size of buffer used to construct spill trees and top-level tree search", ParamValidators.gtEq(-1.0))
 
@@ -60,20 +63,20 @@ private[knn] trait KNNModelParams extends Params with HasFeaturesCol with HasInp
 
 private[knn] trait KNNParams extends KNNModelParams with HasSeed {
   /**
-   * Param for number of points to sample for top-level tree (> 0).
-   * Default: 1000
-   * @group param
-   */
+    * Param for number of points to sample for top-level tree (> 0).
+    * Default: 1000
+    * @group param
+    */
   val topTreeSize = new IntParam(this, "topTreeSize", "number of points to sample for top-level tree", ParamValidators.gt(0))
 
   /** @group getParam */
   def getTopTreeSize: Int = $(topTreeSize)
 
   /**
-   * Param for number of points at which to switch to brute-force for top-level tree (> 0).
-   * Default: 5
-   * @group param
-   */
+    * Param for number of points at which to switch to brute-force for top-level tree (> 0).
+    * Default: 5
+    * @group param
+    */
   val topTreeLeafSize = new IntParam(this, "topTreeLeafSize",
     "number of points at which to switch to brute-force for top-level tree", ParamValidators.gt(0))
 
@@ -81,10 +84,10 @@ private[knn] trait KNNParams extends KNNModelParams with HasSeed {
   def getTopTreeLeafSize: Int = $(topTreeLeafSize)
 
   /**
-   * Param for number of points at which to switch to brute-force for distributed sub-trees (> 0).
-   * Default: 20
-   * @group param
-   */
+    * Param for number of points at which to switch to brute-force for distributed sub-trees (> 0).
+    * Default: 20
+    * @group param
+    */
   val subTreeLeafSize = new IntParam(this, "subTreeLeafSize",
     "number of points at which to switch to brute-force for distributed sub-trees", ParamValidators.gt(0))
 
@@ -92,23 +95,22 @@ private[knn] trait KNNParams extends KNNModelParams with HasSeed {
   def getSubTreeLeafSize: Int = $(subTreeLeafSize)
 
   /**
-   * Param for number of sample sizes to take when estimating buffer size (at least two samples).
-   * Default: 100 to 1000 by 100
-   * @group param
-   */
+    * Param for number of sample sizes to take when estimating buffer size (at least two samples).
+    * Default: 100 to 1000 by 100
+    * @group param
+    */
   val bufferSizeSampleSizes = new Param[Array[Int]](this, "bufferSizeSampleSize",
-    "number of sample sizes to take when estimating buffer size",
-    {arr: Array[Int] => arr.length > 1 && arr.forall(_ > 0)})
+    "number of sample sizes to take when estimating buffer size", { arr: Array[Int] => arr.length > 1 && arr.forall(_ > 0) })
 
   /** @group getParam */
   def getBufferSizeSampleSizes: Array[Int] = $(bufferSizeSampleSizes)
 
   /**
-   * Param for fraction of total points at which spill tree reverts back to metric tree
-   * if either child contains more points (0 <= rho <= 1).
-   * Default: 70%
-   * @group param
-   */
+    * Param for fraction of total points at which spill tree reverts back to metric tree
+    * if either child contains more points (0 <= rho <= 1).
+    * Default: 70%
+    * @group param
+    */
   val balanceThreshold = new DoubleParam(this, "balanceThreshold",
     "fraction of total points at which spill tree reverts back to metric tree if either child contains more points",
     ParamValidators.inRange(0, 1))
@@ -121,10 +123,10 @@ private[knn] trait KNNParams extends KNNModelParams with HasSeed {
     k -> 5, neighborsCol -> "neighbors")
 
   /**
-   * Validates and transforms the input schema.
-   * @param schema input schema
-   * @return output schema
-   */
+    * Validates and transforms the input schema.
+    * @param schema input schema
+    * @return output schema
+    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     val auxFeatures = $(inputCols).map(c => schema(c))
@@ -132,11 +134,26 @@ private[knn] trait KNNParams extends KNNModelParams with HasSeed {
   }
 }
 
-class KNNModel private[ml] (
-                             override val uid: String,
-                           val topTree: Tree,
-                           val subTrees: RDD[Tree]
-                             ) extends Model[KNNModel] with KNNModelParams {
+// $COVERAGE-ON$
+
+/**
+  * kNN Model facilitates k-Nestrest Neighbor search by storing distributed hybrid spill tree.
+  * Top level tree is a MetricTree but instead of using back tracking, it searches all possible leaves in parallel
+  * to avoid multiple iterations. It uses the same buffer size that is used in model training, when the search
+  * vector falls into the buffer zone of the node, it dispatches search to both children.
+  *
+  * A high level overview of the search phases is as follows:
+  * 1. For each vector to search, go through the top level tree to output a pair of (index, point)
+  * 2. Repartition search points by partition index
+  * 3. Search each point through the hybrid spill tree in that particular partition
+  * 4. For each point, merge results from different partitions and keep top k results.
+  *
+  */
+class KNNModel private[ml](
+                            override val uid: String,
+                            val topTree: Broadcast[Tree],
+                            val subTrees: RDD[Tree]
+                          ) extends Model[KNNModel] with KNNModelParams {
   require(subTrees.getStorageLevel != StorageLevel.NONE,
     "KNNModel is not designed to work with Trees that have not been cached")
 
@@ -152,9 +169,9 @@ class KNNModel private[ml] (
   //TODO: All these can benefit from DataSet API in Spark 1.6
   override def transform(dataset: DataFrame): DataFrame = {
     val searchData = dataset.select($(featuresCol)).rdd.map(_.getAs[Vector](0)).zipWithIndex()
-      .flatMap{
+      .flatMap {
         point =>
-          val idx = KNN.searchIndecies(new VectorWithNorm(point._1), topTree, $(bufferSize)).map(i => (i, point))
+          val idx = KNN.searchIndecies(new VectorWithNorm(point._1), topTree.value, $(bufferSize)).map(i => (i, point))
           assert(idx.nonEmpty, s"indices must be non-empty: $point")
           idx
       }
@@ -175,11 +192,11 @@ class KNNModel private[ml] (
     }
 
     // merge results by point index together and keep topK results
-    val merged = results.topByKey($(k))(Ordering.by(- _._2))
+    val merged = results.topByKey($(k))(Ordering.by(-_._2))
       .map { case (i, seq) => (i, seq.map(_._1)) }
 
     dataset.sqlContext.createDataFrame(
-      dataset.rdd.zipWithIndex().map{ case (row, i) => (i, row) }
+      dataset.rdd.zipWithIndex().map { case (row, i) => (i, row) }
         .leftOuterJoin(merged)
         .map {
           case (i, (row, neighbors)) =>
@@ -200,7 +217,53 @@ class KNNModel private[ml] (
   }
 }
 
-class KNN (override val uid: String) extends Estimator[KNNModel] with KNNParams {
+/**
+  * k-Nearest Neighbors (kNN) algorithm
+  *
+  * kNN finds k closest observations in training dataset. It can be used for both classification and regression.
+  * Furthermore it can also be used for other purposes such as input to clustering algorithm.
+  *
+  * While the brute-force approach requires no pre-training, each prediction requires going through the entire training
+  * set resulting O(n log(k)) runtime per individual prediction using a heap keep track of neighbor candidates.
+  * Many different implementations have been proposed such as Locality Sensitive Hashing (LSH), KD-Tree, Metric Tree and etc.
+  * Each algorithm has its shortcomings that prevent them to be effective on large-scale and/or high-dimensional dataset.
+  *
+  * This is an implementation of kNN based upon distributed Hybrid Spill-Trees where training points are organized into
+  * distributed binary trees. The algorithm is designed to support accurate approximate kNN search but by tuning parameters
+  * an exact search can also be performed with cost of additional runtime.
+  * Each binary tree node is either a
+  * Metric Node:
+  *   Metric Node partition points exclusively into two children by finding two pivot points and divide by middle plane.
+  *   When searched, the child whose pivot is closer to query vector is searched first. Back tracking is required to
+  *   ensure accuracy in this case, where the other child should be searched if it can possibly contain better neighbor
+  *   based upon candidates picked during previous search.
+  * or Spill Node:
+  *   Spill Node also partitions points into two children however there are an overlapping buffer between the two pivot
+  *   points. The larger the buffer size, the less effective the node eliminates points thus could increase tree height.
+  *   When searched, defeatist search is used where only one child is searched and no back tracking happens in this
+  *   process. Because of the buffer between two children, we are likely to end up with good enough candidates without
+  *   searching the other part of the tree.
+  * While Spill Node promises O(h) runtime where h is the tree height, the tree is deeper than Metric Tree's O(log n)
+  * height on average. Furthermore, when it comes down to leaves where points are more closer to each other, the static
+  * buffer size means more points will end up in the buffer. Therefore a Balance Threshold (rho) is introduced: when
+  * either child of Spill Node makes up more than rho fraction of the total points at this level, Spill Node is reverted
+  * back to a Metric Node.
+  *
+  * A high level overview of the algorithm is as follows:
+  * 1. Sample M data points (M is relatively small and can be held in driver)
+  * 2. Build the top level metric tree
+  * 3. Repartition RDD by assigning each point to leaf node of the above tree
+  * 4. Build a hybrid spill tree at each partition
+  * This concludes the training phase of kNN.
+  * See [[KNNModel]] for details on prediction phase.
+  *
+  *
+  * This algorithm is described in [[http://dx.doi.org/10.1109/WACV.2007.18]] where it was shown to scale well in terms of
+  * number of observations and dimensions, bounded by the available memory across clusters (billions in paper's example).
+  * This implementation adapts the MapReduce algorithm to work with Spark.
+  *
+  */
+class KNN(override val uid: String) extends Estimator[KNNModel] with KNNParams {
   def this() = this(Identifiable.randomUID("knn"))
 
   /** @group setParam */
@@ -232,31 +295,34 @@ class KNN (override val uid: String) extends Estimator[KNNModel] with KNNParams 
 
   override def fit(dataset: DataFrame): KNNModel = {
     val rand = new XORShiftRandom($(seed))
+    //prepare data for model estimation
     val data = dataset.selectExpr($(featuresCol), $(inputCols).mkString("struct(", ",", ")"))
       .map(row => new RowWithVector(row.getAs[Vector](0), row.getStruct(1)))
+    //sample data to build top-level tree
     val sampled = data.sample(false, $(topTreeSize).toDouble / dataset.count(), rand.nextLong()).collect()
     val topTree = MetricTree.build(sampled, $(topTreeLeafSize), rand.nextLong())
+    //build partitioner using top-level tree
     val part = new KNNPartitioner(topTree)
-    val repartitioned = new ShuffledRDD[RowWithVector, Null, Null](data.map(v => (v, null)), part)
+    val repartitioned = new ShuffledRDD[RowWithVector, Null, Null](data.map(v => (v, null)), part).keys
 
     val tau =
-      if($(bufferSize) < 0) {
+      if ($(bufferSize) < 0) {
         KNN.estimateTau(data, $(bufferSizeSampleSizes), rand.nextLong())
       } else {
         $(bufferSize)
       }
     logInfo("Tau is: " + tau)
 
-    val trees = repartitioned.mapPartitionsWithIndex{
+    val trees = repartitioned.mapPartitionsWithIndex {
       (partitionId, itr) =>
         val rand = new XORShiftRandom(byteswap64($(seed) ^ partitionId))
         val childTree =
-          HybridTree.build(itr.map(_._1).toIndexedSeq, $(subTreeLeafSize), tau, $(balanceThreshold), rand.nextLong())
+          HybridTree.build(itr.toIndexedSeq, $(subTreeLeafSize), tau, $(balanceThreshold), rand.nextLong())
 
         Iterator(childTree)
     }.persist(StorageLevel.MEMORY_AND_DISK)
 
-    val model = new KNNModel(uid, topTree, trees).setParent(this)
+    val model = new KNNModel(uid, trees.context.broadcast(topTree), trees).setParent(this)
     copyValues(model).setBufferSize(tau)
   }
 
@@ -269,40 +335,71 @@ class KNN (override val uid: String) extends Estimator[KNNModel] with KNNParams 
 
 
 object KNN extends Logging {
+
+  /**
+    * VectorWithNorm can use more efficient algorithm to calculate distance
+    */
   case class VectorWithNorm(vector: Vector, norm: Double) {
     def this(vector: Vector) = this(vector, Vectors.norm(vector, 2))
+
     def this(vector: BV[Double]) = this(Vectors.fromBreeze(vector))
 
     def fastSquaredDistance(v: VectorWithNorm): Double = {
       KNNUtils.fastSquaredDistance(vector, norm, v.vector, v.norm)
     }
+
     def fastDistance(v: VectorWithNorm): Double = math.sqrt(fastSquaredDistance(v))
   }
 
+  /**
+    * VectorWithNorm plus auxiliary row information
+    */
   case class RowWithVector(vector: VectorWithNorm, row: Row) {
     def this(vector: Vector, row: Row) = this(new VectorWithNorm(vector), row)
   }
 
+  /**
+    * Estimate a suitable buffer size based on dataset
+    *
+    * A suitable buffer size is the minimum size such that nearest neighbors can be accurately found even at
+    * boundary of splitting plane between pivot points. Therefore assuming points are uniformly distributed in
+    * high dimensional space, it should be approximately the average distance between points.
+    *
+    * Specifically the number of points within a certain radius of a given point is proportionally to the density of
+    * points raised to the effective number of dimensions, of which manifold data points exist on:
+    *   R_s = \frac{c}{N_s ** 1/d}
+    * where R_s is the radius, N_s is the number of points, d is effective number of dimension, and c is a constant.
+    *
+    * To estimate R_s_all for entire dataset, we can take samples of the dataset of different size N_s to compute R_s.
+    * We can estimate c and d using linear regression. Lastly we can calculate R_s_all using total number of observation
+    * in dataset.
+    *
+    */
   def estimateTau(data: RDD[RowWithVector], sampleSize: Array[Int], seed: Long): Double = {
     val total = data.count()
 
-    val estimators = data.mapPartitionsWithIndex {
+    // take samples of points for estimation
+    val samples = data.mapPartitionsWithIndex {
       case (partitionId, itr) =>
         val rand = new XORShiftRandom(byteswap64(seed ^ partitionId))
-        itr.flatMap{
+        itr.flatMap {
           p => sampleSize.zipWithIndex
-            .filter{ case (size, _) => rand.nextDouble() * total < size }
-            .map{ case (size, index) => (index, p) }
+            .filter { case (size, _) => rand.nextDouble() * total < size }
+            .map { case (size, index) => (index, p) }
         }
     }
+    // compute N_s and R_s pairs
+    val estimators = samples
       .groupByKey()
       .map {
         case (index, points) => (points.size, computeAverageDistance(points))
       }.collect().distinct
 
-    val x = DenseVector(estimators.map{ case(n, _) => math.log(n)})
-    val y = DenseVector(estimators.map{ case(_, d) => math.log(d)})
+    // collect x and y vectors
+    val x = DenseVector(estimators.map { case (n, _) => math.log(n) })
+    val y = DenseVector(estimators.map { case (_, d) => math.log(d) })
 
+    // estimate log(R_s) = alpha + beta * log(N_s)
     val xMeanVariance: MeanAndVariance = meanAndVariance(x)
     val xmean = xMeanVariance.mean
     val yMeanVariance: MeanAndVariance = meanAndVariance(y)
@@ -314,11 +411,13 @@ object KNN extends Logging {
     val alpha = ymean - beta * xmean
     val rs = math.exp(alpha + beta * math.log(total))
 
-    rs / math.sqrt(- 1 / beta)
+    // c = alpha, d = - 1 / beta
+    rs / math.sqrt(-1 / beta)
   }
 
+  // compute the average distance of nearest neighbors within points using brute-force
   private[this] def computeAverageDistance(points: Iterable[RowWithVector]): Double = {
-    val distances = points.map{
+    val distances = points.map {
       point => points.map(p => p.vector.fastSquaredDistance(point.vector)).filter(_ > 0).min
     }.map(math.sqrt)
 
@@ -326,20 +425,20 @@ object KNN extends Logging {
   }
 
   /**
-   * Search leaf index used by KNNPartitioner to partition training points
-   *
-   * @param v one training point to partition
-   * @param tree top tree constructed using sampled points
-   * @param acc accumulator used to help determining leaf index
-   * @return leaf/partition index
-   */
+    * Search leaf index used by KNNPartitioner to partition training points
+    *
+    * @param v one training point to partition
+    * @param tree top tree constructed using sampled points
+    * @param acc accumulator used to help determining leaf index
+    * @return leaf/partition index
+    */
   @tailrec
   private[knn] def searchIndex(v: RowWithVector, tree: Tree, acc: Int = 0): Int = {
     tree match {
       case node: MetricTree =>
         val leftDistance = node.leftPivot.fastSquaredDistance(v.vector)
         val rightDistance = node.rightPivot.fastSquaredDistance(v.vector)
-        if(leftDistance < rightDistance) {
+        if (leftDistance < rightDistance) {
           searchIndex(v, node.leftChild, acc)
         } else {
           searchIndex(v, node.rightChild, acc + node.leftChild.leafCount)
@@ -356,7 +455,7 @@ object KNN extends Logging {
         val rightDistance = node.rightPivot.fastDistance(v)
 
         val buffer = new ArrayBuffer[Int]
-        if(leftDistance - rightDistance <= tau) {
+        if (leftDistance - rightDistance <= tau) {
           buffer ++= searchIndecies(v, node.leftChild, tau, acc)
         }
 
@@ -370,10 +469,10 @@ object KNN extends Logging {
   }
 
   /**
-   * Partitioner used to map vector to leaf node which determines the partition it goes to
-   *
-   * @param tree [[MetricTree]] used to find leaf
-   */
+    * Partitioner used to map vector to leaf node which determines the partition it goes to
+    *
+    * @param tree [[MetricTree]] used to find leaf
+    */
   class KNNPartitioner[T <: RowWithVector](tree: Tree) extends Partitioner {
     override def numPartitions: Int = tree.leafCount
 
