@@ -116,7 +116,7 @@ private[knn] trait KNNParams extends KNNModelParams with HasSeed {
   /** @group getParam */
   def getBalanceThreshold: Double = $(balanceThreshold)
 
-  setDefault(topTreeSize -> 1000, topTreeLeafSize -> 5, subTreeLeafSize -> 20,
+  setDefault(topTreeSize -> 1000, topTreeLeafSize -> 10, subTreeLeafSize -> 30,
     bufferSize -> -1.0, bufferSizeSampleSizes -> (100 to 1000 by 100).toArray, balanceThreshold -> 0.7,
     k -> 5, neighborsCol -> "neighbors")
 

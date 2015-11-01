@@ -49,7 +49,7 @@ object MNIST extends Logging {
       .setK(100)
       .setOutputCol("pcaFeatures")
     val knn = new KNN()
-      .setTopTreeSize(100)
+      .setTopTreeSize(rdd.count().toInt / 1000)
       .setFeaturesCol("pcaFeatures")
       .setAuxCols(Array("label"))
       .setK(10)
