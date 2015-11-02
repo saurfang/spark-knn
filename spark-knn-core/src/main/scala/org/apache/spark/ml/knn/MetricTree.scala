@@ -15,7 +15,7 @@ import scala.util.Random
  * distance to the pivot vector. Finally it knows the number of leaves to help
  * determining partition index.
  */
-private[knn] abstract class Tree extends Serializable {
+private[ml] abstract class Tree extends Serializable {
   val leftChild: Tree
   val rightChild: Tree
   val size: Int

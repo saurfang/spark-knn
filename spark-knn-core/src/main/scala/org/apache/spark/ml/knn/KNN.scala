@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.hashing.byteswap64
 
 // features column => vector, input columns => auxiliary columns to return by KNN model
-private[knn] trait KNNModelParams extends Params with HasFeaturesCol with HasInputCols {
+private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInputCols {
   /**
     * Param for the column name for returned neighbors.
     * Default: "neighbors"
@@ -57,9 +57,38 @@ private[knn] trait KNNModelParams extends Params with HasFeaturesCol with HasInp
 
   /** @group getParam */
   def getBufferSize: Double = $(bufferSize)
+
+  private[ml] def transform(dataset: DataFrame, topTree: Broadcast[Tree], subTrees: RDD[Tree]): RDD[(Long, Array[Row])] = {
+    val searchData = dataset.select($(featuresCol)).rdd.map(_.getAs[Vector](0)).zipWithIndex()
+      .flatMap {
+        point =>
+          val idx = KNN.searchIndecies(new VectorWithNorm(point._1), topTree.value, $(bufferSize)).map(i => (i, point))
+          assert(idx.nonEmpty, s"indices must be non-empty: $point")
+          idx
+      }
+      .partitionBy(new HashPartitioner(subTrees.partitions.length))
+
+    // for each partition, search points within corresponding child tree
+    val results = searchData.zipPartitions(subTrees) {
+      (childData, trees) =>
+        val tree = trees.next()
+        assert(!trees.hasNext)
+        childData.flatMap {
+          case (_, (point, i)) =>
+            val vectorWithNorm = new VectorWithNorm(point)
+            tree.query(vectorWithNorm, $(k)).map {
+              neighbor => (i, (neighbor.row, neighbor.vector.fastSquaredDistance(vectorWithNorm)))
+            }
+        }
+    }
+
+    // merge results by point index together and keep topK results
+    results.topByKey($(k))(Ordering.by(-_._2))
+      .map { case (i, seq) => (i, seq.map(_._1)) }
+  }
 }
 
-private[knn] trait KNNParams extends KNNModelParams with HasSeed {
+private[ml] trait KNNParams extends KNNModelParams with HasSeed {
   /**
     * Param for number of points to sample for top-level tree (> 0).
     * Default: 1000
@@ -164,32 +193,7 @@ class KNNModel private[ml](
 
   //TODO: All these can benefit from DataSet API in Spark 1.6
   override def transform(dataset: DataFrame): DataFrame = {
-    val searchData = dataset.select($(featuresCol)).rdd.map(_.getAs[Vector](0)).zipWithIndex()
-      .flatMap {
-        point =>
-          val idx = KNN.searchIndecies(new VectorWithNorm(point._1), topTree.value, $(bufferSize)).map(i => (i, point))
-          assert(idx.nonEmpty, s"indices must be non-empty: $point")
-          idx
-      }
-      .partitionBy(new HashPartitioner(subTrees.partitions.length))
-
-    // for each partition, search points within corresponding child tree
-    val results = searchData.zipPartitions(subTrees) {
-      (childData, trees) =>
-        val tree = trees.next()
-        assert(!trees.hasNext)
-        childData.flatMap {
-          case (_, (point, i)) =>
-            val vectorWithNorm = new VectorWithNorm(point)
-            tree.query(vectorWithNorm, $(k)).map {
-              neighbor => (i, (neighbor.row, neighbor.vector.fastSquaredDistance(vectorWithNorm)))
-            }
-        }
-    }
-
-    // merge results by point index together and keep topK results
-    val merged = results.topByKey($(k))(Ordering.by(-_._2))
-      .map { case (i, seq) => (i, seq.map(_._1)) }
+    val merged = transform(dataset, topTree, subTrees)
 
     dataset.sqlContext.createDataFrame(
       dataset.rdd.zipWithIndex().map { case (row, i) => (i, row) }
@@ -444,7 +448,7 @@ object KNN extends Logging {
   }
 
   //TODO: Might want to make this tail recursive
-  private[knn] def searchIndecies(v: VectorWithNorm, tree: Tree, tau: Double, acc: Int = 0): Seq[Int] = {
+  private[ml] def searchIndecies(v: VectorWithNorm, tree: Tree, tau: Double, acc: Int = 0): Seq[Int] = {
     tree match {
       case node: MetricTree =>
         val leftDistance = node.leftPivot.fastDistance(v)

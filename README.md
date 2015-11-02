@@ -8,6 +8,21 @@ WIP...
 k-Nearest Neighbors algorithm (k-NN) implemented on Apache Spark. This uses a hybrid spill tree approach to
 achieve high accuracy and search efficiency. 
 
+## KNNClassifier
+
+```scala
+//read in raw label and features
+val training = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+
+val knn = new KNNClassifier()
+  .setTopTreeSize(training.count().toInt / 500)
+  .setK(10)
+
+val knnModel = knn.fit(training)
+
+val predicted = knn.transform(training)
+```
+
 
 ## Credits
 
