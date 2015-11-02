@@ -22,8 +22,6 @@ import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.util.hashing.byteswap64
 
-// $COVERAGE-OFF$
-
 // features column => vector, input columns => auxiliary columns to return by KNN model
 private[knn] trait KNNModelParams extends Params with HasFeaturesCol with HasInputCols {
   /**
@@ -133,8 +131,6 @@ private[knn] trait KNNParams extends KNNModelParams with HasSeed {
     SchemaUtils.appendColumn(schema, $(neighborsCol), ArrayType(StructType(auxFeatures)))
   }
 }
-
-// $COVERAGE-ON$
 
 /**
   * kNN Model facilitates k-Nestrest Neighbor search by storing distributed hybrid spill tree.
