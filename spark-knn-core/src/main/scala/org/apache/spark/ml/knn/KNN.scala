@@ -3,7 +3,7 @@ package org.apache.spark.ml.knn
 import breeze.linalg.{DenseVector, Vector => BV}
 import breeze.stats._
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.ml.knn.KNN.{VectorWithNorm, KNNPartitioner, RowWithVector}
+import org.apache.spark.ml.knn.KNN.{KNNPartitioner, RowWithVector, VectorWithNorm}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -16,7 +16,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.XORShiftRandom
-import org.apache.spark.{HashPartitioner, Logging, Partitioner}
+import org.apache.spark.{Logging, HashPartitioner, Partitioner}
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
@@ -58,12 +58,15 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
   /** @group getParam */
   def getBufferSize: Double = $(bufferSize)
 
-  private[ml] def transform(dataset: DataFrame, topTree: Broadcast[Tree], subTrees: RDD[Tree]): RDD[(Long, Array[Row])] = {
-    val searchData = dataset.select($(featuresCol)).rdd.map(_.getAs[Vector](0)).zipWithIndex()
+  private[ml] def transform(data: RDD[Vector], topTree: Broadcast[Tree], subTrees: RDD[Tree]): RDD[(Long, Array[Row])] = {
+    val searchData = data.zipWithIndex()
       .flatMap {
-        point =>
-          val idx = KNN.searchIndecies(new VectorWithNorm(point._1), topTree.value, $(bufferSize)).map(i => (i, point))
-          assert(idx.nonEmpty, s"indices must be non-empty: $point")
+        case (vector, index) =>
+          val vectorWithNorm = new VectorWithNorm(vector)
+          val idx = KNN.searchIndecies(vectorWithNorm, topTree.value, $(bufferSize))
+            .map(i => (i, (vectorWithNorm, index)))
+
+          assert(idx.nonEmpty, s"indices must be non-empty: $vector ($index)")
           idx
       }
       .partitionBy(new HashPartitioner(subTrees.partitions.length))
@@ -75,9 +78,8 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
         assert(!trees.hasNext)
         childData.flatMap {
           case (_, (point, i)) =>
-            val vectorWithNorm = new VectorWithNorm(point)
-            tree.query(vectorWithNorm, $(k)).map {
-              neighbor => (i, (neighbor.row, neighbor.vector.fastSquaredDistance(vectorWithNorm)))
+            tree.query(point, $(k)).map {
+              case (neighbor, distance) => (i, (neighbor.row, distance))
             }
         }
     }
@@ -85,6 +87,10 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
     // merge results by point index together and keep topK results
     results.topByKey($(k))(Ordering.by(-_._2))
       .map { case (i, seq) => (i, seq.map(_._1)) }
+  }
+
+  private[ml] def transform(dataset: DataFrame, topTree: Broadcast[Tree], subTrees: RDD[Tree]): RDD[(Long, Array[Row])] = {
+    transform(dataset.select($(featuresCol)).rdd.map(_.getAs[Vector](0)), topTree, subTrees)
   }
 }
 

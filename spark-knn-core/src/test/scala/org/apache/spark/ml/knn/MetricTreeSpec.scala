@@ -1,8 +1,8 @@
 package org.apache.spark.ml.knn
 
 import org.apache.spark.ml.knn.KNN.{RowWithVector, VectorWithNorm}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.scalatest.{Matchers, FunSpec}
+import org.apache.spark.mllib.linalg.Vectors
+import org.scalatest.{FunSpec, Matchers}
 
 class MetricTreeSpec extends FunSpec with Matchers {
 
@@ -34,17 +34,17 @@ class MetricTreeSpec extends FunSpec with Matchers {
               tree.iterator.toIterable should contain theSameElementsAs data
             }
             it("should return vector itself for those in input set") {
-              data.foreach(v => tree.query(v.vector, 1).head shouldBe v)
+              data.foreach(v => tree.query(v.vector, 1).head._1 shouldBe v)
             }
             it("should return nearest neighbors correctly") {
-              tree.query(origin, 5).map(_.vector.vector) should contain theSameElementsAs Set(
+              tree.query(origin, 5).map(_._1.vector.vector) should contain theSameElementsAs Set(
                 Vectors.dense(-1, 0),
                 Vectors.dense(1, 0),
                 Vectors.dense(0, -1),
                 Vectors.dense(0, 1),
                 Vectors.dense(0, 0)
               )
-              tree.query(origin, 9).map(_.vector.vector) should contain theSameElementsAs
+              tree.query(origin, 9).map(_._1.vector.vector) should contain theSameElementsAs
                 (-1 to 1).flatMap(i => (-1 to 1).map(j => Vectors.dense(i, j)))
             }
             it("should have correct number of leaves") {
@@ -73,7 +73,7 @@ class MetricTreeSpec extends FunSpec with Matchers {
         tree.leafCount shouldBe 2
       }
       it("should return all available duplicated candidates") {
-        val res = tree.query(origin, 5).map(_.vector.vector)
+        val res = tree.query(origin, 5).map(_._1.vector.vector)
         res.size shouldBe 5
         res.toSet should contain theSameElementsAs Array(Vectors.dense(0.0, 1.0))
       }

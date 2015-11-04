@@ -1,17 +1,18 @@
 package org.apache.spark.ml.knn
 
-import org.apache.spark.SharedSparkContext
 import org.apache.spark.ml.classification.KNNClassifier
 import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.ml.knn.KNN.VectorWithNorm
+import org.apache.spark.ml.regression.KNNRegression
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.{Logging, SharedSparkContext}
 import org.scalatest.{FunSuite, Matchers}
 
 import scala.collection.mutable
 
-class KNNSuite extends FunSuite with SharedSparkContext with Matchers {
+class KNNSuite extends FunSuite with SharedSparkContext with Matchers with Logging {
 
   private[this] val data = (-10 to 10).flatMap(i => (-10 to 10).map(j => Vectors.dense(i, j)))
   private[this] val leafSize = 5
@@ -33,8 +34,8 @@ class KNNSuite extends FunSuite with SharedSparkContext with Matchers {
       row =>
         val vector = row.getAs[Vector](2)
         val neighbors = row.getAs[mutable.WrappedArray[Row]](3)
-        if(neighbors.isEmpty) {
-          println(vector)
+        if (neighbors.isEmpty) {
+          logError(vector.toString)
         }
         neighbors.length shouldBe 1
         val neighbor = neighbors.head.getAs[Vector](0)
@@ -49,7 +50,26 @@ class KNNSuite extends FunSuite with SharedSparkContext with Matchers {
       .setSubTreeLeafSize(leafSize)
 
     val df = createDataFrame()
-    df.sqlContext.udf.register("label", {v: Vector => math.abs(v(0))})
+    df.sqlContext.udf.register("label", { v: Vector => math.abs(v(0)) })
+    val training = df.selectExpr("*", "label(features) as label")
+    val model = knn.fit(training).setK(1)
+
+    val results = model.transform(training).select("label", "prediction").collect()
+    results.length shouldBe data.size
+
+    results foreach {
+      row => row.getDouble(0) shouldBe row.getDouble(1)
+    }
+  }
+
+  test("KNNRegressor can be fitted") {
+    val knn = new KNNRegression()
+      .setTopTreeSize(data.size / 10)
+      .setTopTreeLeafSize(leafSize)
+      .setSubTreeLeafSize(leafSize)
+
+    val df = createDataFrame()
+    df.sqlContext.udf.register("label", { v: Vector => math.abs(v(0)) })
     val training = df.selectExpr("*", "label(features) as label")
     val model = knn.fit(training).setK(1)
 

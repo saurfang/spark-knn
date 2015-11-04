@@ -1,12 +1,11 @@
 package org.apache.spark.ml.knn
 
 import breeze.linalg._
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.ml.knn.KNN._
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.util.random.XORShiftRandom
 
 import scala.collection.mutable
-import scala.util.Random
 
 /**
  * A [[Tree]] is used to store data points used in k-NN search. It represents
@@ -31,8 +30,8 @@ private[ml] abstract class Tree extends Serializable {
    * @param k number of nearest neighbor
    * @return a list of neighbor that is nearest to the query vector
    */
-  def query(v: Vector, k: Int = 1): Iterable[RowWithVector] = query(new VectorWithNorm(v), k)
-  def query(v: VectorWithNorm, k: Int): Iterable[RowWithVector] = query(new KNNCandidates(v, k)).toIterable
+  def query(v: Vector, k: Int = 1): Iterable[(RowWithVector, Double)] = query(new VectorWithNorm(v), k)
+  def query(v: VectorWithNorm, k: Int): Iterable[(RowWithVector, Double)] = query(new KNNCandidates(v, k)).toIterable
 
   /**
    * Refine k-NN candidates using data in this [[Tree]]
@@ -392,6 +391,6 @@ class KNNCandidates(val queryVector: VectorWithNorm, val k: Int) extends Seriali
     val distance = v.vector.fastDistance(queryVector)
     if(notFull || distance < maxDistance) insert(v, distance)
   }
-  def toIterable: Iterable[RowWithVector] = candidates.map(_._1)
+  def toIterable: Iterable[(RowWithVector, Double)] = candidates.toIterable
   def notFull: Boolean = candidates.size < k
 }

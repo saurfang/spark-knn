@@ -23,6 +23,21 @@ val knnModel = knn.fit(training)
 val predicted = knn.transform(training)
 ```
 
+## KNNRegression
+
+```scala
+//read in raw label and features
+val training = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+
+val knn = new KNNRegression()
+  .setTopTreeSize(training.count().toInt / 500)
+  .setK(10)
+
+val knnModel = knn.fit(training)
+
+val predicted = knn.transform(training)
+```
+
 
 ## Credits
 

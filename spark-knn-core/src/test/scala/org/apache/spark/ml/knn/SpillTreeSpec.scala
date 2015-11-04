@@ -2,7 +2,7 @@ package org.apache.spark.ml.knn
 
 import org.apache.spark.ml.knn.KNN.RowWithVector
 import org.apache.spark.mllib.linalg.Vectors
-import org.scalatest.{Matchers, FunSpec}
+import org.scalatest.{FunSpec, Matchers}
 
 class SpillTreeSpec extends FunSpec with Matchers {
   describe("SpillTree") {
@@ -40,7 +40,7 @@ class SpillTreeSpec extends FunSpec with Matchers {
         }
       }
       describe("built with tau = 0.5") {
-        val tree = SpillTree.build(points, leafSize = leafSize , tau = 0.5)
+        val tree = SpillTree.build(points, leafSize = leafSize, tau = 0.5)
         it("should have correct size") {
           tree.size shouldBe points.size
         }
@@ -48,7 +48,7 @@ class SpillTreeSpec extends FunSpec with Matchers {
           tree.iterator.toIterable should contain theSameElementsAs points
         }
         it("works for every point to identify itself") {
-          points.foreach(v => tree.query(v.vector, 1).head shouldBe v)
+          points.foreach(v => tree.query(v.vector, 1).head._1 shouldBe v)
         }
         it("has consistent size and iterator") {
           def check(tree: Tree): Unit = {
