@@ -51,8 +51,9 @@ class KNNSuite extends FunSuite with SharedSparkContext with Matchers with Loggi
       .setTopTreeSize(data.size / 10)
       .setTopTreeLeafSize(leafSize)
       .setSubTreeLeafSize(leafSize)
-    checkKNN(df => knn.fit(df).setK(1))
-    checkKNN(df => knn.setWeightCol("z").fit(df).setK(1))
+      .setK(1)
+    checkKNN(knn.fit)
+    checkKNN(knn.setWeightCol("z").fit)
   }
 
   test("KNNRegressor can be fitted with/without weight column") {
@@ -60,15 +61,32 @@ class KNNSuite extends FunSuite with SharedSparkContext with Matchers with Loggi
       .setTopTreeSize(data.size / 10)
       .setTopTreeLeafSize(leafSize)
       .setSubTreeLeafSize(leafSize)
-    checkKNN(df => knn.fit(df).setK(1))
-    checkKNN(df => knn.setWeightCol("z").fit(df).setK(1))
+      .setK(1)
+    checkKNN(knn.fit)
+    checkKNN(knn.setWeightCol("z").fit)
   }
 
-  private[this] def checkKNN(trainModel: DataFrame => PredictionModel[Vector, _]): Unit = {
+  test("KNNParmas are copied correctly") {
+    val knn = new KNNClassifier()
+      .setTopTreeSize(data.size / 10)
+      .setTopTreeLeafSize(leafSize)
+      .setSubTreeLeafSize(leafSize)
+      .setK(2)
+    val model = knn.fit(createDataFrame().withColumn("label", lit(1.0)))
+    // check pre-set parameters are correctly copied
+    model.getK shouldBe 2
+    model.getTopTreeSize shouldBe (data.size / 10)
+    model.getTopTreeLeafSize shouldBe leafSize
+    model.getSubTreeLeafSize shouldBe leafSize
+    // check auto generated buffer size is correctly transferred
+    model.getBufferSize should be > 0.0
+  }
+
+  private[this] def checkKNN(fit: DataFrame => PredictionModel[_, _]): Unit = {
     val df = createDataFrame()
     df.sqlContext.udf.register("label", { v: Vector => math.abs(v(0)) })
     val training = df.selectExpr("*", "label(features) as label")
-    val model = trainModel(training)
+    val model = fit(training)
 
     val results = model.transform(training).select("label", "prediction").collect()
     results.length shouldBe data.size
