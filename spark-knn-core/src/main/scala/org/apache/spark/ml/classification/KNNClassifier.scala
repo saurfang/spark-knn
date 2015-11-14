@@ -4,6 +4,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.Predictor
 import org.apache.spark.ml.knn._
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -21,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
   * the class most common among its k nearest neighbors.
   */
 class KNNClassifier(override val uid: String) extends Predictor[Vector, KNNClassifier, KNNClassificationModel]
-with KNNParams with Logging {
+with KNNParams with HasWeightCol with Logging {
   def this() = this(Identifiable.randomUID("knnc"))
 
   /** @group setParam */
@@ -30,11 +31,29 @@ with KNNParams with Logging {
   /** @group setParam */
   override def setLabelCol(value: String): this.type = {
     set(labelCol, value)
-    set(inputCols, Array(value))
+
+    if ($(weightCol).isEmpty) {
+      set(inputCols, Array(value))
+    } else {
+      set(inputCols, Array(value, $(weightCol)))
+    }
   }
 
   //fill in default label col
   setDefault(inputCols, Array($(labelCol)))
+
+  /** @group setWeight */
+  def setWeightCol(value: String): this.type = {
+    set(weightCol, value)
+
+    if (value.isEmpty) {
+      set(inputCols, Array($(labelCol)))
+    } else {
+      set(inputCols, Array($(labelCol), value))
+    }
+  }
+
+  setDefault(weightCol -> "")
 
   /** @group setParam */
   def setK(value: Int): this.type = set(k, value)
@@ -101,7 +120,7 @@ class KNNClassificationModel private[ml](
                                           val subTrees: RDD[Tree],
                                           val _numClasses: Int
                                         ) extends ProbabilisticClassificationModel[Vector, KNNClassificationModel]
-with KNNParams with Serializable {
+with KNNParams with HasWeightCol with Serializable {
   require(subTrees.getStorageLevel != StorageLevel.NONE,
     "KNNModel is not designed to work with Trees that have not been cached")
 
@@ -115,13 +134,21 @@ with KNNParams with Serializable {
 
   //TODO: This can benefit from DataSet API in Spark 1.6
   override def transform(dataset: DataFrame): DataFrame = {
+    val getWeight: Row => Double = {
+      if($(weightCol).isEmpty) {
+        r => 1.0
+      } else {
+        r => r.getDouble(1)
+      }
+    }
+
     val merged = transform(dataset, topTree, subTrees)
       .map {
         case (id, labels) =>
           val vector = new Array[Double](numClasses)
           var i = 0
           while (i < labels.length) {
-            vector(labels(i).getDouble(0).toInt) += 1
+            vector(labels(i).getDouble(0).toInt) += getWeight(labels(i))
             i += 1
           }
           val rawPrediction = Vectors.dense(vector)

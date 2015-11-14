@@ -1,16 +1,19 @@
 package org.apache.spark.ml.knn
 
+import org.apache.spark.ml.PredictionModel
 import org.apache.spark.ml.classification.KNNClassifier
 import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.ml.knn.KNN.VectorWithNorm
 import org.apache.spark.ml.regression.KNNRegression
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.{Logging, SharedSparkContext}
 import org.scalatest.{FunSuite, Matchers}
 
 import scala.collection.mutable
+
 
 class KNNSuite extends FunSuite with SharedSparkContext with Matchers with Logging {
 
@@ -32,8 +35,8 @@ class KNNSuite extends FunSuite with SharedSparkContext with Matchers with Loggi
 
     results.foreach {
       row =>
-        val vector = row.getAs[Vector](2)
-        val neighbors = row.getAs[mutable.WrappedArray[Row]](3)
+        val vector = row.getAs[Vector](3)
+        val neighbors = row.getAs[mutable.WrappedArray[Row]](4)
         if (neighbors.isEmpty) {
           logError(vector.toString)
         }
@@ -43,35 +46,29 @@ class KNNSuite extends FunSuite with SharedSparkContext with Matchers with Loggi
     }
   }
 
-  test("KNNClassifier can be fitted") {
+  test("KNNClassifier can be fitted with/without weight column") {
     val knn = new KNNClassifier()
       .setTopTreeSize(data.size / 10)
       .setTopTreeLeafSize(leafSize)
       .setSubTreeLeafSize(leafSize)
-
-    val df = createDataFrame()
-    df.sqlContext.udf.register("label", { v: Vector => math.abs(v(0)) })
-    val training = df.selectExpr("*", "label(features) as label")
-    val model = knn.fit(training).setK(1)
-
-    val results = model.transform(training).select("label", "prediction").collect()
-    results.length shouldBe data.size
-
-    results foreach {
-      row => row.getDouble(0) shouldBe row.getDouble(1)
-    }
+    checkKNN(df => knn.fit(df).setK(1))
+    checkKNN(df => knn.setWeightCol("z").fit(df).setK(1))
   }
 
-  test("KNNRegressor can be fitted") {
+  test("KNNRegressor can be fitted with/without weight column") {
     val knn = new KNNRegression()
       .setTopTreeSize(data.size / 10)
       .setTopTreeLeafSize(leafSize)
       .setSubTreeLeafSize(leafSize)
+    checkKNN(df => knn.fit(df).setK(1))
+    checkKNN(df => knn.setWeightCol("z").fit(df).setK(1))
+  }
 
+  private[this] def checkKNN(trainModel: DataFrame => PredictionModel[Vector, _]): Unit = {
     val df = createDataFrame()
     df.sqlContext.udf.register("label", { v: Vector => math.abs(v(0)) })
     val training = df.selectExpr("*", "label(features) as label")
-    val model = knn.fit(training).setK(1)
+    val model = trainModel(training)
 
     val results = model.transform(training).select("label", "prediction").collect()
     results.length shouldBe data.size
@@ -95,7 +92,7 @@ class KNNSuite extends FunSuite with SharedSparkContext with Matchers with Loggi
             StructField("y", DoubleType)
           )
         )
-      )
+      ).withColumn("z", lit(1.0))
     )
   }
 }
