@@ -21,7 +21,7 @@ When the model is trained, data points are repartitioned and within each partiti
  efficient querying. When model is used in prediction, the prediction vectors are repartitioned, searched, collected and
  joined back to the search DataFrame. Assuming the training set is much larger, subsequent prediction can be much quicker
  than training. Overall the algorithm displays a `O(m log n)` runtime much better than the naive `O(m n)`
- runtime (for n training points, m prediction points and k = 1). See [benchmark](##Benchmark) section for more details.
+ runtime (for n training points, m prediction points and k = 1). See [benchmark](#benchmark) section for more details.
  
 The number of neighbors can be set before and after training. Other parameters must be set before training and they control
 the number of partitions and trade of between accuracy and efficiency of individual search tree. 
