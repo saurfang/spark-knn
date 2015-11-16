@@ -47,8 +47,10 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
   /**
     * Param for size of buffer used to construct spill trees and top-level tree search.
     * Note the buffer size is 2 * tau as described in the paper.
+    *
     * When buffer size is 0.0, the tree itself reverts to a metric tree.
     * -1.0 triggers automatic effective nearest neighbor distance estimation.
+    *
     * Default: -1.0
     * @group param
     */
@@ -174,10 +176,11 @@ private[ml] trait KNNParams extends KNNModelParams with HasSeed {
   * vector falls into the buffer zone of the node, it dispatches search to both children.
   *
   * A high level overview of the search phases is as follows:
-  * 1. For each vector to search, go through the top level tree to output a pair of (index, point)
-  * 2. Repartition search points by partition index
-  * 3. Search each point through the hybrid spill tree in that particular partition
-  * 4. For each point, merge results from different partitions and keep top k results.
+  *
+  *  1. For each vector to search, go through the top level tree to output a pair of (index, point)
+  *  1. Repartition search points by partition index
+  *  1. Search each point through the hybrid spill tree in that particular partition
+  *  1. For each point, merge results from different partitions and keep top k results.
   *
   */
 class KNNModel private[ml](
@@ -237,18 +240,22 @@ class KNNModel private[ml](
   * This is an implementation of kNN based upon distributed Hybrid Spill-Trees where training points are organized into
   * distributed binary trees. The algorithm is designed to support accurate approximate kNN search but by tuning parameters
   * an exact search can also be performed with cost of additional runtime.
+  *
   * Each binary tree node is either a
-  * Metric Node:
-  *   Metric Node partition points exclusively into two children by finding two pivot points and divide by middle plane.
-  *   When searched, the child whose pivot is closer to query vector is searched first. Back tracking is required to
-  *   ensure accuracy in this case, where the other child should be searched if it can possibly contain better neighbor
-  *   based upon candidates picked during previous search.
-  * or Spill Node:
-  *   Spill Node also partitions points into two children however there are an overlapping buffer between the two pivot
-  *   points. The larger the buffer size, the less effective the node eliminates points thus could increase tree height.
-  *   When searched, defeatist search is used where only one child is searched and no back tracking happens in this
-  *   process. Because of the buffer between two children, we are likely to end up with good enough candidates without
-  *   searching the other part of the tree.
+  *
+  * '''Metric Node''':
+  * Metric Node partition points exclusively into two children by finding two pivot points and divide by middle plane.
+  * When searched, the child whose pivot is closer to query vector is searched first. Back tracking is required to
+  * ensure accuracy in this case, where the other child should be searched if it can possibly contain better neighbor
+  * based upon candidates picked during previous search.
+  *
+  * '''Spill Node''':
+  * Spill Node also partitions points into two children however there are an overlapping buffer between the two pivot
+  * points. The larger the buffer size, the less effective the node eliminates points thus could increase tree height.
+  * When searched, defeatist search is used where only one child is searched and no back tracking happens in this
+  * process. Because of the buffer between two children, we are likely to end up with good enough candidates without
+  * searching the other part of the tree.
+  *
   * While Spill Node promises O(h) runtime where h is the tree height, the tree is deeper than Metric Tree's O(log n)
   * height on average. Furthermore, when it comes down to leaves where points are more closer to each other, the static
   * buffer size means more points will end up in the buffer. Therefore a Balance Threshold (rho) is introduced: when
@@ -256,10 +263,12 @@ class KNNModel private[ml](
   * back to a Metric Node.
   *
   * A high level overview of the algorithm is as follows:
-  * 1. Sample M data points (M is relatively small and can be held in driver)
-  * 2. Build the top level metric tree
-  * 3. Repartition RDD by assigning each point to leaf node of the above tree
-  * 4. Build a hybrid spill tree at each partition
+  *
+  *  1. Sample M data points (M is relatively small and can be held in driver)
+  *  1. Build the top level metric tree
+  *  1. Repartition RDD by assigning each point to leaf node of the above tree
+  *  1. Build a hybrid spill tree at each partition
+  *
   * This concludes the training phase of kNN.
   * See [[KNNModel]] for details on prediction phase.
   *
@@ -327,6 +336,8 @@ class KNN(override val uid: String) extends Estimator[KNNModel] with KNNParams {
 
         Iterator(childTree)
     }.persist(StorageLevel.MEMORY_AND_DISK)
+    // TODO: force persisting trees primarily for benchmark. any reason not to do this for regular runs?
+    trees.count()
 
     val model = new KNNModel(uid, trees.context.broadcast(topTree), trees).setParent(this)
     copyValues(model).setBufferSize(tau)
@@ -373,7 +384,7 @@ object KNN extends Logging {
     *
     * Specifically the number of points within a certain radius of a given point is proportionally to the density of
     * points raised to the effective number of dimensions, of which manifold data points exist on:
-    *   R_s = \frac{c}{N_s ** 1/d}
+    * R_s = \frac{c}{N_s ** 1/d}
     * where R_s is the radius, N_s is the number of points, d is effective number of dimension, and c is a constant.
     *
     * To estimate R_s_all for entire dataset, we can take samples of the dataset of different size N_s to compute R_s.
@@ -490,4 +501,5 @@ object KNN extends Logging {
     }
 
   }
+
 }
