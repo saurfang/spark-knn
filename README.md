@@ -14,19 +14,6 @@ a useful baseline model for many machine learning problems.
 k-NN can be used for both classification and regression, which are exposed using the new [Spark ML](http://spark.apache.org/docs/latest/ml-guide.html) 
 API based on DataFrame. Both models accept a weight column so predictions can be optionally weighted.
 
-Furthermore, KNN itself is also exposed for advanced usage which returns arbitrary columns associated with found neighbors.
-For example, this can power clustering use case described in the reference Google paper.
-
-When the model is trained, data points are repartitioned and within each partition a search tree is built to support
- efficient querying. When model is used in prediction, the prediction vectors are repartitioned, searched, collected and
- joined back to the search DataFrame. Assuming the training set is much larger, subsequent prediction can be much quicker
- than training. Overall the algorithm displays a `O(m log n)` runtime much better than the naive `O(m n)`
- runtime (for n training points, m prediction points and k = 1). See [benchmark](#benchmark) section for more details.
- 
-The number of neighbors can be set before and after training. Other parameters must be set before training and they control
-the number of partitions and trade of between accuracy and efficiency of individual search tree. 
-Please refer to Scala doc for more information.
-
 ### KNNClassifier
 
 ```scala
@@ -56,6 +43,19 @@ val knnModel = knn.fit(training)
 
 val predicted = knn.transform(training)
 ```
+
+Furthermore, KNN itself is also exposed for advanced usage which returns arbitrary columns associated with found neighbors.
+For example, this can power clustering use case described in the reference Google paper.
+
+When the model is trained, data points are repartitioned and within each partition a search tree is built to support
+ efficient querying. When model is used in prediction, the prediction vectors are repartitioned, searched, collected and
+ joined back to the search DataFrame. Assuming the training set is much larger, subsequent prediction can be much quicker
+ than training. Overall the algorithm displays a `O(m log n)` runtime much better than the naive `O(m n)`
+ runtime (for n training points, m prediction points and k = 1). See [benchmark](#benchmark) section for more details.
+ 
+The number of neighbors can be set before and after training. Other parameters must be set before training and they control
+the number of partitions and trade of between accuracy and efficiency of individual search tree. 
+Please refer to Scala doc for more information.
 
 ## Benchmark
 
