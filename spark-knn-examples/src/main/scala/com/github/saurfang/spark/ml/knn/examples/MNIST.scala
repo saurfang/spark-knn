@@ -20,21 +20,22 @@ object MNIST extends Logging {
     //read in raw label and features
     val dataset = MLUtils.loadLibSVMFile(sc, "data/mnist/mnist.bz2")
       .toDF()
-      .limit(10000)
 
     //split traning and testing
-    val Array(train, test) = dataset.randomSplit(Array(0.7, 0.3)).map(_.cache())
+    val Array(train, test) = dataset
+      .randomSplit(Array(0.7, 0.3), seed = 1234L)
+      .map(_.cache())
 
     //create PCA matrix to reduce feature dimensions
     val pca = new PCA()
       .setInputCol("features")
-      .setK(100)
+      .setK(50)
       .setOutputCol("pcaFeatures")
     val knn = new KNNClassifier()
       .setTopTreeSize(dataset.count().toInt / 500)
       .setFeaturesCol("pcaFeatures")
       .setPredictionCol("predicted")
-      .setK(10)
+      .setK(1)
     val pipeline = new Pipeline()
       .setStages(Array(pca, knn))
       .fit(train)
