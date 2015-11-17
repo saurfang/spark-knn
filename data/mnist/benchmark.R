@@ -13,10 +13,10 @@ library(dplyr)
 plotDF <- data.frame(ns, spillTree_train, spillTree_predict, bruteForce_train, bruteForce_predict) %>%
   gather(type, time, -ns) %>%
   separate(type, c("impl", "type")) %>%
-  mutate(time = time / 1e3)
+  mutate(time = time / 1e3, impl = factor(impl))
 
 plot <- ggplot(plotDF) +
-  aes(ns, time, shape = factor(impl), color = impl) +
+  aes(ns, time, shape = impl, color = impl) +
   geom_line() +
   geom_point(size = 5) +
   facet_grid(type ~ .) +
