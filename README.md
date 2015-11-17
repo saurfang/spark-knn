@@ -54,7 +54,7 @@ When the model is trained, data points are repartitioned and within each partiti
  runtime (for n training points, m prediction points and k = 1). See [benchmark](#benchmark) section for more details.
  
 The number of neighbors can be set before and after training. Other parameters must be set before training and they control
-the number of partitions and trade of between accuracy and efficiency of individual search tree. 
+the number of partitions and trade off between accuracy and efficiency of individual search tree. 
 Please refer to Scala doc for more information.
 
 ## Benchmark
@@ -95,6 +95,7 @@ in the original Google paper. *horizontal scalability benchmark results using ec
       NB: the largest cost of this implementation is disk I/O of repartition and distance calculation. While distance calculation
       has no good way to optimize, with DataSet API, we might be able to drastically reduce the shuffle size during training
       and prediction.
+- [ ] explore use of random projection for dimension reduction
 
 ## Credits
 
