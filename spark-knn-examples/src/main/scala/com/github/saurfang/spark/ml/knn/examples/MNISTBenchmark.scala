@@ -17,7 +17,10 @@ import org.apache.spark.{Logging, SparkConf, SparkContext}
   */
 object MNISTBenchmark extends Logging {
   def main(args: Array[String]) {
-    val ns = if(args.isEmpty) (2500 to 10000 by 2500).toArray else args.map(_.toInt)
+    val ns = if(args.isEmpty) (2500 to 10000 by 2500).toArray else args(0).split(',').map(_.toInt)
+    val path = if(args.length >= 2) args(1) else "data/mnist/mnist.bz2"
+    val numPartitions = if(args.length >= 3) args(2).toInt else 10
+    val models = if(args.length >=4) args(3).split(',') else Array("tree","naive")
 
     val conf = new SparkConf()
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
@@ -26,17 +29,18 @@ object MNISTBenchmark extends Logging {
     import sqlContext.implicits._
 
     //read in raw label and features
-    val dataset = MLUtils.loadLibSVMFile(sc, "data/mnist/mnist.bz2")
+    val dataset = MLUtils.loadLibSVMFile(sc, path)
       .zipWithIndex()
-      .sortBy(_._2, numPartitions = 10)
+      .sortBy(_._2, numPartitions = numPartitions)
       .keys
       .toDF()
+      .limit(ns.max)
       .cache()
     dataset.count() //force persist
 
     val limiter = new Limiter()
     val knn = new KNNClassifier()
-      .setTopTreeSize(dataset.count().toInt / 1000)
+      .setTopTreeSize(numPartitions * 10)
       .setFeaturesCol("features")
       .setPredictionCol("prediction")
       .setK(1)
@@ -56,10 +60,14 @@ object MNISTBenchmark extends Logging {
       .setEstimatorParamMaps(paramGrid)
       .setNumTimes(3)
 
-    val bmModel = bm.setEstimator(pipeline).fit(dataset)
-    val naiveBMModel = bm.setEstimator(naivePipeline).fit(dataset)
-    logInfo(s"knn: ${bmModel.avgTrainingRuntimes.toSeq} / ${bmModel.avgEvaluationRuntimes.toSeq}")
-    logInfo(s"naive: ${naiveBMModel.avgTrainingRuntimes.toSeq} / ${naiveBMModel.avgEvaluationRuntimes.toSeq}")
+    if(models.contains("tree")) {
+      val bmModel = bm.setEstimator(pipeline).fit(dataset)
+      logInfo(s"knn: ${bmModel.avgTrainingRuntimes.toSeq} / ${bmModel.avgEvaluationRuntimes.toSeq}")
+    }
+    if(models.contains("naive")) {
+      val naiveBMModel = bm.setEstimator(naivePipeline).fit(dataset)
+      logInfo(s"naive: ${naiveBMModel.avgTrainingRuntimes.toSeq} / ${naiveBMModel.avgEvaluationRuntimes.toSeq}")
+    }
   }
 }
 
