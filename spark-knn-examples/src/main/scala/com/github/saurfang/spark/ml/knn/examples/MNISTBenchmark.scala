@@ -31,10 +31,10 @@ object MNISTBenchmark extends Logging {
     //read in raw label and features
     val dataset = MLUtils.loadLibSVMFile(sc, path)
       .zipWithIndex()
+      .filter(_._2 < ns.max)
       .sortBy(_._2, numPartitions = numPartitions)
       .keys
       .toDF()
-      .limit(ns.max)
       .cache()
     dataset.count() //force persist
 
