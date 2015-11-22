@@ -78,7 +78,8 @@ class Limiter(override val uid: String) extends Transformer {
 
   def setN(value: Int): this.type = set(n, value)
 
-  override def transform(dataset: DataFrame): DataFrame = dataset.limit($(n))
+  // hack to maintain number of partitions (otherwise it collapses to 1 which is unfair for naiveKNN)
+  override def transform(dataset: DataFrame): DataFrame = dataset.limit($(n)).repartition(dataset.rdd.partitions.length)
 
   override def copy(extra: ParamMap): Transformer = defaultCopy(extra)
 
