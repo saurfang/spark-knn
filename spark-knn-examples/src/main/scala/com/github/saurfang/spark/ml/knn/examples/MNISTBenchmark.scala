@@ -12,6 +12,8 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 
+import scala.collection.mutable
+
 /**
   * Benchmark KNN as a function of number of observations
   */
@@ -60,14 +62,16 @@ object MNISTBenchmark extends Logging {
       .setEstimatorParamMaps(paramGrid)
       .setNumTimes(3)
 
+    val metrics = mutable.ArrayBuffer[String]()
     if(models.contains("tree")) {
       val bmModel = bm.setEstimator(pipeline).fit(dataset)
-      logInfo(s"knn: ${bmModel.avgTrainingRuntimes.toSeq} / ${bmModel.avgEvaluationRuntimes.toSeq}")
+      metrics += s"knn: ${bmModel.avgTrainingRuntimes.toSeq} / ${bmModel.avgEvaluationRuntimes.toSeq}"
     }
     if(models.contains("naive")) {
       val naiveBMModel = bm.setEstimator(naivePipeline).fit(dataset)
-      logInfo(s"naive: ${naiveBMModel.avgTrainingRuntimes.toSeq} / ${naiveBMModel.avgEvaluationRuntimes.toSeq}")
+      metrics += s"naive: ${naiveBMModel.avgTrainingRuntimes.toSeq} / ${naiveBMModel.avgEvaluationRuntimes.toSeq}"
     }
+    logInfo(metrics.mkString("\n"))
   }
 }
 
