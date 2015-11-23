@@ -59,6 +59,8 @@ Please refer to Scala doc for more information.
 
 ## Benchmark
 
+Preliminary benchmark results can be found at [here](data/mnist/benchmark.md).
+
 We have benchmarked our implementation against MNIST dataset. For the canonical 60k training dataset, our implementation
  is able to get a reasonable cross validated F1 score of 0.97 comparing to brute force exact algorithm's *to be computed*.
 
@@ -66,8 +68,7 @@ While the implementation is approximate, it doesn't suffer much even when the di
 raw dimension: 784). This can be a huge advantage over other approximate implementation such as KD-tree and LSH. *further
 benchmark is required*
 
-The implementation also exhibits sub-linear runtime which can lead to huge savings for large datasets. *benchmark
- results incoming*
+The implementation also exhibits sub-linear runtime which can lead to huge savings for large datasets.
 
 ![](data/mnist/benchmark.png)
 
@@ -76,7 +77,7 @@ close to linearithmic runtime.
  
 Finally the implementation scales horizontally and has been successfully applied on datasets with low hundreds millions of 
 observations and low hundreds dimensions. We have no reason to say why it can't scale to billions of observations as described
-in the original Google paper. *horizontal scalability benchmark results using ec2 incoming*
+in the original Google paper.
 
 
 ## Progress

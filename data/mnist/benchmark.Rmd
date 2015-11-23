@@ -1,0 +1,179 @@
+---
+title: "kNN Benchmark"
+output: 
+  html_document: 
+    keep_md: yes
+---
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(RANN)
+library(class)
+
+plot_runtimes <- function(df) {
+ggplot(df) +
+  aes(ns, time, shape = impl, color = impl) +
+  geom_line() +
+  geom_point(size = 5) +
+  facet_grid(type ~ .) +
+  theme_bw() +
+  labs(x = "number of data points", y = "wall-clock duration (seconds)")
+}
+```
+
+We use [MNIST data](https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/multiclass.html) to benchmark our kNN implementation. Recall our kNN implementation is based on hybrid spill tree and more details can be found at the main
+README.
+
+For tests with less than 60k observations, we use the regular MNIST. For those with more than 60k
+observations, we opted for the *mnist8m* processed dataset.
+
+## kNN on local Spark
+We first compare kNN runtime performace on Spark local mode. 
+```{r pre-run local}
+ns_local <- seq(2500, 10000, 2500)
+
+spillTree_train <- c(7632.666666666666, 7165.333333333333, 7857.666666666666, 9299.333333333332)
+spillTree_predict <- c(34317.0, 50162.666666666664, 62151.0, 74604.0)
+
+bruteForce_train <- c(420.3333333333333, 714.6666666666666, 847.0, 876.6666666666666)
+bruteForce_predict <- c(18028.666666666664, 47125.0, 94626.66666666666, 156086.66666666666)
+
+local_runtimes <- data.frame(ns = ns_local, spillTree_train, spillTree_predict, bruteForce_train, bruteForce_predict) %>%
+  gather(type, time, -ns) %>%
+  separate(type, c("impl", "type")) %>%
+  mutate(time = time / 1e3, impl = factor(impl))
+ 
+plot_runtimes(local_runtimes) + ggtitle("MNIST Data on local[3]")
+```
+While the spill-tree implementation has much larger overhead, the savings on the search efficiency quickly
+trumps the naive brute-force approach when n gets larger.
+
+## kNN on local R
+For perspective, we also ran the kNN using RANN in R which is based on KD-tree and knn in class package which is brute force based.
+
+Note: all Spark benchmark is average of three runs while all R local benchmark numbers are even less scientific with a single run instead.
+
+```{r local-read}
+if(!file.exists("rann.rds") || !file.exists("knn.rds")) {
+  mnist <- readr::read_csv("mnist.csv.gz", col_names = FALSE, progress = FALSE)
+  ns_local[1] %>%
+    sapply(function(n) {
+      runtime <- select(mnist, -X1) %>% 
+        head(n) %>% 
+        as.matrix() %>%
+        { system.time(nn2(., k = 2)) }
+      runtime[1]
+    }) %>%
+    saveRDS("rann.rds")
+  head(ns_local, 2) %>%
+    sapply(function(n) {
+      runtime <- select(mnist, -X1) %>% 
+        head(n) %>% 
+        as.matrix() %>%
+        { system.time(knn1(., ., head(mnist, n)$X1)) }
+      runtime[1]
+    }) %>%
+    saveRDS("knn.rds")
+}
+```
+```{r local-rann}
+# due to RANN takes the shortcut when distance is zero and k = 1 it directly returns
+# we have to pick k = 2. experiments emprically show k = 2 ~ 10 has no significant effect on runtime
+rann_runtimes <- readRDS("rann.rds")
+```
+```{r local-knn}
+r_knn_runtimes <- readRDS("knn.rds")
+```
+```{r local-plot}
+local_runtimes <- data.frame(ns = ns_local, 
+                             spillTree = spillTree_train + spillTree_predict, 
+                             bruteForce = bruteForce_train + bruteForce_predict,
+                             kdtree = rann_runtimes * 1000,
+                             knn_r = c(r_knn_runtimes, NA, NA) * 1000) %>%
+  gather(impl, time, -ns) %>%
+  mutate(time = time / 1e3, impl = factor(impl))
+
+ggplot(local_runtimes) +
+  aes(ns, time, shape = impl, color = impl) +
+  geom_line() +
+  geom_point(size = 5) +
+  theme_bw() +
+  labs(x = "number of data points", y = "wall-clock duration (seconds)", title = "MNIST Data with R functions")
+```
+
+## kNN on Spark Clsuter
+Next we test our kNN on AWS 10 c3.4xlarge nodes cluster (160 cores in total).
+
+Note for larger n, we only ran the algorithm using spill tree due to much longer runtime for naive approach.
+
+```{r parse-runtime}
+parse_runtime <- function(raw_lines, raw_ns) {
+  lines <- strsplit(raw_lines, "\n")[[1]]
+  algos <- gsub("^#|:.+", "", lines)
+  runtimes <- gsub("^#.+:|\\s|WrappedArray\\(|\\)", "", lines) %>% strsplit("/")
+  df <- as.data.frame(t(read.csv(text = unlist(c(raw_ns, runtimes)), header = FALSE)))
+  colnames(df) <- c("ns", do.call(paste, c(expand.grid(c("train", "predict"), algos), sep = "_")))
+  df
+}
+```
+```{r cluster-runtime}
+cluster_runtimes <- rbind_list(
+  parse_runtime("#knn: WrappedArray(7342.333333333333, 4962.666666666666, 5370.0, 5151.333333333333, 6091.333333333333, 8506.666666666666) / WrappedArray(6017.333333333333, 7072.0, 8856.0, 9742.666666666666, 15817.0, 32105.0)
+#naive: WrappedArray(1023.6666666666666, 627.6666666666666, 786.3333333333333, 797.3333333333333, 1201.0, 1873.3333333333333) / WrappedArray(4116.333333333333, 4601.666666666666, 5782.0, 7866.666666666666, 19555.666666666664, 70148.33333333333)", "2500,5000,7500,10000,20000,40000"),
+  parse_runtime("#knn: WrappedArray(19883.333333333332, 28345.0, 50083.0) / WrappedArray(63017.33333333333, 189466.66666666666, 641681.3333333333)", "80000,160000,320000")
+) %>%
+  gather(type, time, -ns) %>%
+  separate(type, c("type", "impl")) %>%
+  mutate(time = time / 1e3, impl = factor(impl))
+```
+```{r cluster-plot}
+plot_runtimes(cluster_runtimes) + 
+  # scale_x_log10() + 
+  scale_y_log10() + 
+  ggtitle("MNIST Data on c3.4xlarge * 10")
+```
+
+Notice the y-axis is on log scale.
+
+## Horizontal Scalability
+
+Finally we will examine how the algorithm scales with the number of cores. Again this is using AWS c3.4xlarge nodes.
+
+```{r horizontal-runtimes}
+horizontal_runtimes <- rbind_list(
+  parse_runtime("#knn: WrappedArray(15343.666666666666) / WrappedArray(277521.6666666666)
+#naive: WrappedArray(3510.333333333333) / WrappedArray(777180.0)", "20"),
+  parse_runtime("#knn: WrappedArray(15357.0) / WrappedArray(127080.33333333333)
+#naive: WrappedArray(3717.0) / WrappedArray(308656.66666666666)", "40"),
+  parse_runtime("#knn: WrappedArray(13953.0) / WrappedArray(61519.0)
+#naive: WrappedArray(2677.333333333333) / WrappedArray(201512.3333333333)", "80"),
+  parse_runtime("#knn: WrappedArray(14890.666666666666) / WrappedArray(40220.33333333333)
+#naive: WrappedArray(2776.0) / WrappedArray(175310.0)", "160")
+) %>%
+  gather(type, time, -ns) %>%
+  separate(type, c("type", "impl")) %>%
+  mutate(time = time / 1e3, impl = factor(impl))
+```
+```{r horizontal-plot}
+horizontal_runtimes %>%
+  group_by(impl, ns) %>%
+  summarise(time = sum(time)) %>%
+  arrange(ns) %>%
+  mutate(speedup = first(time) / time) %>%
+  ungroup() %>%
+  ggplot() +
+  aes(ns, speedup, color = impl, shape = impl) +
+  geom_line() +
+  geom_point() +
+  theme_bw() +
+  labs(x = "number of cores", title = "MNIST 60k Data on c3.4xlarge cluster")
+```
+
+Ideally we want the algorithm to scale linearly and we can see our kNN implementation scales quite linearly up to 80 cores The diminishing returns is likely attributed to the low number of observations. For 160 cores, each core is merely responsible for `r 60e3/160` observations on average. In practice, we were able to scale the implementation on hundrends of millions of observations much better with thousands of cores
+
+Note: The naive implementation scales much poorly because some tasks randomly decide to read from network.
+

@@ -32,8 +32,7 @@ class NaiveKNNClassifier(override val uid: String) extends Predictor[Vector, Nai
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
-    val labelSummarizer = instances.treeAggregate(
-      new MultiClassSummarizer)(
+    val labelSummarizer = instances.treeAggregate(new MultiClassSummarizer)(
       seqOp = (c, v) => (c, v) match {
         case (labelSummarizer: MultiClassSummarizer, (label: Double, features: Vector)) =>
           labelSummarizer.add(label)
@@ -73,10 +72,10 @@ class NaiveKNNClassifierModel(
     val features = dataset.select($(featuresCol))
       .map(r => new VectorWithNorm(r.getAs[Vector](0)))
 
-    val merged = features.zipWithIndex()
-      .cartesian(points.zipWithIndex())
+    val merged = features.zipWithUniqueId()
+      .cartesian(points)
       .map {
-        case ((u, i), ((label, v), j)) =>
+        case ((u, i), (label, v)) =>
             val dist = u.fastSquaredDistance(v)
             (i, (dist, label))
       }
@@ -108,7 +107,7 @@ class NaiveKNNClassifierModel(
       }
 
     dataset.sqlContext.createDataFrame(
-      dataset.rdd.zipWithIndex().map { case (row, i) => (i, row) }
+      dataset.rdd.zipWithUniqueId().map { case (row, i) => (i, row) }
         .leftOuterJoin(merged) //make sure we don't lose any observations
         .map {
         case (i, (row, values)) => Row.fromSeq(row.toSeq ++ values.get)

@@ -12,12 +12,17 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 
+import scala.collection.mutable
+
 /**
   * Benchmark KNN as a function of number of observations
   */
 object MNISTBenchmark extends Logging {
   def main(args: Array[String]) {
-    val ns = if(args.isEmpty) (2500 to 10000 by 2500).toArray else args.map(_.toInt)
+    val ns = if(args.isEmpty) (2500 to 10000 by 2500).toArray else args(0).split(',').map(_.toInt)
+    val path = if(args.length >= 2) args(1) else "data/mnist/mnist.bz2"
+    val numPartitions = if(args.length >= 3) args(2).toInt else 10
+    val models = if(args.length >=4) args(3).split(',') else Array("tree","naive")
 
     val conf = new SparkConf()
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
@@ -26,9 +31,10 @@ object MNISTBenchmark extends Logging {
     import sqlContext.implicits._
 
     //read in raw label and features
-    val dataset = MLUtils.loadLibSVMFile(sc, "data/mnist/mnist.bz2")
+    val dataset = MLUtils.loadLibSVMFile(sc, path)
       .zipWithIndex()
-      .sortBy(_._2, numPartitions = 10)
+      .filter(_._2 < ns.max)
+      .sortBy(_._2, numPartitions = numPartitions)
       .keys
       .toDF()
       .cache()
@@ -36,7 +42,7 @@ object MNISTBenchmark extends Logging {
 
     val limiter = new Limiter()
     val knn = new KNNClassifier()
-      .setTopTreeSize(dataset.count().toInt / 1000)
+      .setTopTreeSize(numPartitions * 10)
       .setFeaturesCol("features")
       .setPredictionCol("prediction")
       .setK(1)
@@ -56,10 +62,16 @@ object MNISTBenchmark extends Logging {
       .setEstimatorParamMaps(paramGrid)
       .setNumTimes(3)
 
-    val bmModel = bm.setEstimator(pipeline).fit(dataset)
-    val naiveBMModel = bm.setEstimator(naivePipeline).fit(dataset)
-    logInfo(s"knn: ${bmModel.avgTrainingRuntimes.toSeq} / ${bmModel.avgEvaluationRuntimes.toSeq}")
-    logInfo(s"naive: ${naiveBMModel.avgTrainingRuntimes.toSeq} / ${naiveBMModel.avgEvaluationRuntimes.toSeq}")
+    val metrics = mutable.ArrayBuffer[String]()
+    if(models.contains("tree")) {
+      val bmModel = bm.setEstimator(pipeline).fit(dataset)
+      metrics += s"knn: ${bmModel.avgTrainingRuntimes.toSeq} / ${bmModel.avgEvaluationRuntimes.toSeq}"
+    }
+    if(models.contains("naive")) {
+      val naiveBMModel = bm.setEstimator(naivePipeline).fit(dataset)
+      metrics += s"naive: ${naiveBMModel.avgTrainingRuntimes.toSeq} / ${naiveBMModel.avgEvaluationRuntimes.toSeq}"
+    }
+    logInfo(metrics.mkString("\n"))
   }
 }
 
@@ -70,7 +82,8 @@ class Limiter(override val uid: String) extends Transformer {
 
   def setN(value: Int): this.type = set(n, value)
 
-  override def transform(dataset: DataFrame): DataFrame = dataset.limit($(n))
+  // hack to maintain number of partitions (otherwise it collapses to 1 which is unfair for naiveKNN)
+  override def transform(dataset: DataFrame): DataFrame = dataset.limit($(n)).repartition(dataset.rdd.partitions.length)
 
   override def copy(extra: ParamMap): Transformer = defaultCopy(extra)
 
