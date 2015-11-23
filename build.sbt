@@ -8,8 +8,6 @@ lazy val core = knnProject("spark-knn-core").
   settings(
     name := "spark-knn",
     spName := "saurfang/spark-knn",
-    sparkVersion := "1.5.2",
-    sparkComponents += "mllib",
     credentials += Credentials(Path.userHome / ".ivy2" / ".sbtcredentials"),
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0")
   ).
