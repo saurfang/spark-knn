@@ -1,3 +1,4 @@
+import com.typesafe.sbt.GitVersioning
 import sbt._
 import Keys._
 import com.typesafe.sbt.GitPlugin.autoImport._
@@ -22,6 +23,7 @@ object Common {
     import c.universe._
     reify {
       (Project.projectMacroImpl(c).splice in file(path.splice)).
+        enablePlugins(GitVersioning).
         settings(name := path.splice).
         settings(Dependencies.Versions).
         settings(commonSettings)

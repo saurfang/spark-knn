@@ -11,6 +11,9 @@ a useful baseline model for many machine learning problems.
 
 ## How to Use
 
+This package is published using [sbt-spark-package](https://github.com/databricks/sbt-spark-package) and 
+linking information can be found at http://spark-packages.org/package/saurfang/spark-knn
+
 k-NN can be used for both classification and regression, which are exposed using the new [Spark ML](http://spark.apache.org/docs/latest/ml-guide.html) 
 API based on DataFrame. Both models accept a weight column so predictions can be optionally weighted.
 
