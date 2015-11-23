@@ -46,6 +46,44 @@ class KNNSuite extends FunSuite with SharedSparkContext with Matchers with Loggi
     }
   }
 
+  test("KNN fits correctly with maxDistance") {
+    val knn = new KNN()
+      .setTopTreeSize(data.size / 10)
+      .setTopTreeLeafSize(leafSize)
+      .setSubTreeLeafSize(leafSize)
+      .setAuxCols(Array("features"))
+
+    val df = createDataFrame()
+    val model = knn.fit(df).setK(6).setMaxDistance(1)
+
+    val results = model.transform(df).collect()
+    results.length shouldBe data.size
+
+    results.foreach {
+      row =>
+        val vector = row.getAs[Vector](3)
+        val neighbors = row.getAs[mutable.WrappedArray[Row]](4)
+        if (neighbors.isEmpty) {
+          logError(vector.toString)
+        }
+
+        val numEdges = vector.toArray.map(math.abs).filter(_ == 10).size
+        if (neighbors.length > 5 - numEdges) {
+          logError(vector.toString)
+          logError(neighbors.toList.toString)
+        }
+        neighbors.length should be <= 5 - numEdges
+
+        val closest = neighbors.head.getAs[Vector](0)
+        new VectorWithNorm(vector).fastSquaredDistance(new VectorWithNorm(closest)) shouldBe 0.0
+        val rest = neighbors.tail.map(_.getAs[Vector](0))
+        rest.foreach { neighbor =>
+          val sqDist = new VectorWithNorm(vector).fastSquaredDistance(new VectorWithNorm(neighbor)) 
+          sqDist shouldEqual 1.0 +- 1e-6
+        }
+    }
+  }
+
   test("KNNClassifier can be fitted with/without weight column") {
     val knn = new KNNClassifier()
       .setTopTreeSize(data.size / 10)

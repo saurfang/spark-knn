@@ -45,6 +45,17 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
   def getK: Int = $(k)
 
   /**
+   * Param for maximum distance to find neighbors
+   * Default: Double.PositiveInfinity
+   * @group param
+   */
+  val maxDistance = new DoubleParam(this, "maxNeighbors", "maximum distance to find neighbors",
+                                     ParamValidators.gt(0))
+
+  /** @group getParam */
+  def getMaxDistance: Double = $(maxDistance)
+
+  /**
     * Param for size of buffer used to construct spill trees and top-level tree search.
     * Note the buffer size is 2 * tau as described in the paper.
     *
@@ -80,8 +91,9 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
         assert(!trees.hasNext)
         childData.flatMap {
           case (_, (point, i)) =>
-            tree.query(point, $(k)).map {
-              case (neighbor, distance) => (i, (neighbor.row, distance))
+            tree.query(point, $(k)).collect {
+              case (neighbor, distance) if distance <= $(maxDistance) =>
+                (i, (neighbor.row, distance))
             }
         }
     }
@@ -155,7 +167,7 @@ private[ml] trait KNNParams extends KNNModelParams with HasSeed {
 
   setDefault(topTreeSize -> 1000, topTreeLeafSize -> 10, subTreeLeafSize -> 30,
     bufferSize -> -1.0, bufferSizeSampleSizes -> (100 to 1000 by 100).toArray, balanceThreshold -> 0.7,
-    k -> 5, neighborsCol -> "neighbors")
+    k -> 5, neighborsCol -> "neighbors", maxDistance -> Double.PositiveInfinity)
 
   /**
     * Validates and transforms the input schema.
@@ -196,6 +208,9 @@ class KNNModel private[ml](
 
   /** @group setParam */
   def setK(value: Int): this.type = set(k, value)
+
+  /** @group setParam */
+  def setMaxDistance(value: Double): this.type = set(maxDistance, value)
 
   /** @group setParam */
   def setBufferSize(value: Double): this.type = set(bufferSize, value)
