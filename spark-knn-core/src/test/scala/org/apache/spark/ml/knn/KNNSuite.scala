@@ -67,7 +67,7 @@ class KNNSuite extends FunSuite with SharedSparkContext with Matchers with Loggi
           logError(vector.toString)
         }
 
-        val numEdges = vector.toArray.map(math.abs).filter(_ == 10).size
+        val numEdges = vector.toArray.map(math.abs).count(_ == 10)
         if (neighbors.length > 5 - numEdges) {
           logError(vector.toString)
           logError(neighbors.toList.toString)
@@ -78,7 +78,7 @@ class KNNSuite extends FunSuite with SharedSparkContext with Matchers with Loggi
         new VectorWithNorm(vector).fastSquaredDistance(new VectorWithNorm(closest)) shouldBe 0.0
         val rest = neighbors.tail.map(_.getAs[Vector](0))
         rest.foreach { neighbor =>
-          val sqDist = new VectorWithNorm(vector).fastSquaredDistance(new VectorWithNorm(neighbor)) 
+          val sqDist = new VectorWithNorm(vector).fastSquaredDistance(new VectorWithNorm(neighbor))
           sqDist shouldEqual 1.0 +- 1e-6
         }
     }
@@ -118,6 +118,16 @@ class KNNSuite extends FunSuite with SharedSparkContext with Matchers with Loggi
     model.getSubTreeLeafSize shouldBe leafSize
     // check auto generated buffer size is correctly transferred
     model.getBufferSize should be > 0.0
+  }
+
+  test("BufferSize is not estimated if rho = 0") {
+    val knn = new KNNClassifier()
+      .setTopTreeSize(data.size / 10)
+      .setTopTreeLeafSize(leafSize)
+      .setSubTreeLeafSize(leafSize)
+      .setBalanceThreshold(0)
+    val model = knn.fit(createDataFrame().withColumn("label", lit(1.0)))
+    model.getBufferSize shouldBe -1.0
   }
 
   private[this] def checkKNN(fit: DataFrame => PredictionModel[_, _]): Unit = {

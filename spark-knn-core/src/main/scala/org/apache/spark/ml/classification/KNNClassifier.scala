@@ -166,7 +166,7 @@ with KNNParams with HasWeightCol with Serializable {
             values.append(prediction)
           }
 
-          (id, values.toSeq)
+          (id, values)
       }
 
     dataset.sqlContext.createDataFrame(

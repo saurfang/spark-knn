@@ -27,6 +27,7 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
   /**
     * Param for the column name for returned neighbors.
     * Default: "neighbors"
+    *
     * @group param
     */
   val neighborsCol = new Param[String](this, "neighborsCol", "column names for returned neighbors")
@@ -37,6 +38,7 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
   /**
     * Param for number of neighbors to find (> 0).
     * Default: 5
+    *
     * @group param
     */
   val k = new IntParam(this, "k", "number of neighbors to find", ParamValidators.gt(0))
@@ -47,7 +49,8 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
   /**
    * Param for maximum distance to find neighbors
    * Default: Double.PositiveInfinity
-   * @group param
+    *
+    * @group param
    */
   val maxDistance = new DoubleParam(this, "maxNeighbors", "maximum distance to find neighbors",
                                      ParamValidators.gt(0))
@@ -63,6 +66,7 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
     * -1.0 triggers automatic effective nearest neighbor distance estimation.
     *
     * Default: -1.0
+    *
     * @group param
     */
   val bufferSize = new DoubleParam(this, "bufferSize",
@@ -112,6 +116,7 @@ private[ml] trait KNNParams extends KNNModelParams with HasSeed {
   /**
     * Param for number of points to sample for top-level tree (> 0).
     * Default: 1000
+    *
     * @group param
     */
   val topTreeSize = new IntParam(this, "topTreeSize", "number of points to sample for top-level tree", ParamValidators.gt(0))
@@ -122,6 +127,7 @@ private[ml] trait KNNParams extends KNNModelParams with HasSeed {
   /**
     * Param for number of points at which to switch to brute-force for top-level tree (> 0).
     * Default: 5
+    *
     * @group param
     */
   val topTreeLeafSize = new IntParam(this, "topTreeLeafSize",
@@ -133,6 +139,7 @@ private[ml] trait KNNParams extends KNNModelParams with HasSeed {
   /**
     * Param for number of points at which to switch to brute-force for distributed sub-trees (> 0).
     * Default: 20
+    *
     * @group param
     */
   val subTreeLeafSize = new IntParam(this, "subTreeLeafSize",
@@ -144,6 +151,7 @@ private[ml] trait KNNParams extends KNNModelParams with HasSeed {
   /**
     * Param for number of sample sizes to take when estimating buffer size (at least two samples).
     * Default: 100 to 1000 by 100
+    *
     * @group param
     */
   val bufferSizeSampleSizes = new Param[Array[Int]](this, "bufferSizeSampleSize",
@@ -156,6 +164,7 @@ private[ml] trait KNNParams extends KNNModelParams with HasSeed {
     * Param for fraction of total points at which spill tree reverts back to metric tree
     * if either child contains more points (0 <= rho <= 1).
     * Default: 70%
+    *
     * @group param
     */
   val balanceThreshold = new DoubleParam(this, "balanceThreshold",
@@ -171,6 +180,7 @@ private[ml] trait KNNParams extends KNNModelParams with HasSeed {
 
   /**
     * Validates and transforms the input schema.
+    *
     * @param schema input schema
     * @return output schema
     */
@@ -336,7 +346,7 @@ class KNN(override val uid: String) extends Estimator[KNNModel] with KNNParams {
     val repartitioned = new ShuffledRDD[RowWithVector, Null, Null](data.map(v => (v, null)), part).keys
 
     val tau =
-      if ($(bufferSize) < 0) {
+      if ($(balanceThreshold) > 0 && $(bufferSize) < 0) {
         KNN.estimateTau(data, $(bufferSizeSampleSizes), rand.nextLong())
       } else {
         $(bufferSize)
@@ -443,8 +453,17 @@ object KNN extends Logging {
     val alpha = ymean - beta * xmean
     val rs = math.exp(alpha + beta * math.log(total))
 
-    // c = alpha, d = - 1 / beta
-    rs / math.sqrt(-1 / beta)
+    if (beta > 0) {
+      logError(
+        s"""Unable to estimate Tau with positive beta: $beta. This maybe because data is too small.
+           |Setting to $ymean which is the average distance we found in the sample.
+           |This may leads to poor accuracy. Consider manually set bufferSize instead.
+           |You can also try setting balanceThreshold to zero so only metric trees are built.""".stripMargin)
+      ymean
+    } else {
+      // c = alpha, d = - 1 / beta
+      rs / math.sqrt(-1 / beta)
+    }
   }
 
   // compute the average distance of nearest neighbors within points using brute-force

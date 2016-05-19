@@ -305,6 +305,7 @@ object HybridTree {
    * @param rho balance threshold
    * @return a [[Tree]] can be used to do k-NN query
    */
+  //noinspection ScalaStyle
   def build(data: IndexedSeq[RowWithVector],
                             leafSize: Int = 1,
                             tau: Double,
@@ -326,14 +327,14 @@ object HybridTree {
         val rightPivot = data.maxBy(v => leftPivot.fastSquaredDistance(v.vector)).vector
         val pivot = new VectorWithNorm(Vectors.fromBreeze((leftPivot.vector.toBreeze + rightPivot.vector.toBreeze) / 2.0))
         val radius = math.sqrt(data.map(v => pivot.fastSquaredDistance(v.vector)).max)
-        val dataWithDistance = data.map(v =>
+        lazy val dataWithDistance = data.map(v =>
           (v, leftPivot.fastDistance(v.vector), rightPivot.fastDistance(v.vector))
         )
         // implemented boundary is parabola (rather than perpendicular plane described in the paper)
-        val leftPartition = dataWithDistance.filter { case (_, left, right) => left - right <= tau }.map(_._1)
-        val rightPartition = dataWithDistance.filter { case (_, left, right) => right - left <= tau }.map(_._1)
+        lazy val leftPartition = dataWithDistance.filter { case (_, left, right) => left - right <= tau }.map(_._1)
+        lazy val rightPartition = dataWithDistance.filter { case (_, left, right) => right - left <= tau }.map(_._1)
 
-        if(leftPartition.size > size * rho || rightPartition.size > size * rho) {
+        if(rho <= 0.0 || leftPartition.size > size * rho || rightPartition.size > size * rho) {
           //revert back to metric node
           val (leftPartition, rightPartition) = data.partition{
             v => leftPivot.fastSquaredDistance(v.vector) < rightPivot.fastSquaredDistance(v.vector)
@@ -391,6 +392,6 @@ class KNNCandidates(val queryVector: VectorWithNorm, val k: Int) extends Seriali
     val distance = v.vector.fastDistance(queryVector)
     if(notFull || distance < maxDistance) insert(v, distance)
   }
-  def toIterable: Iterable[(RowWithVector, Double)] = candidates.toIterable
+  def toIterable: Iterable[(RowWithVector, Double)] = candidates
   def notFull: Boolean = candidates.size < k
 }
