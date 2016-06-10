@@ -18,3 +18,8 @@ project/plugins/project/
 .idea
 .Rproj.user
 .Rhistory
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class

@@ -5,6 +5,7 @@ from pyspark.mllib.linalg import Vectors
 from pyspark_knn.ml.classification import KNNClassifier
 
 
+# This is a simple test app. Use the following command to run:
 # spark-submit --driver-class-path ../spark-knn-core/target/scala-2.10/spark-knn_*.jar test.py
 
 sc = SparkContext(appName='test')
