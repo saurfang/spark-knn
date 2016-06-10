@@ -85,7 +85,7 @@ class KNNRegressionModel private[ml](
                                       val topTree: Broadcast[Tree],
                                       val subTrees: RDD[Tree]
                                     ) extends PredictionModel[Vector, KNNRegressionModel]
-with KNNParams with HasWeightCol with Serializable {
+with KNNModelParams with HasWeightCol with Serializable {
   require(subTrees.getStorageLevel != StorageLevel.NONE,
     "KNNModel is not designed to work with Trees that have not been cached")
 

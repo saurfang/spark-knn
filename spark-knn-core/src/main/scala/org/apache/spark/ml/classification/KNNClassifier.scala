@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
   * An object is classified by a majority vote of its neighbors, with the object being assigned to
   * the class most common among its k nearest neighbors.
   */
-class KNNClassifier(override val uid: String) extends Predictor[Vector, KNNClassifier, KNNClassificationModel]
+class KNNClassifier(override val uid: String) extends ProbabilisticClassifier[Vector, KNNClassifier, KNNClassificationModel]
 with KNNParams with HasWeightCol with Logging {
   def this() = this(Identifiable.randomUID("knnc"))
 
@@ -107,8 +107,16 @@ with KNNParams with HasWeightCol with Logging {
     }
 
     val knnModel = copyValues(new KNN()).fit(dataset)
-    val model = new KNNClassificationModel(uid, knnModel.topTree, knnModel.subTrees, numClasses)
-    copyValues(model).setBufferSize(knnModel.getBufferSize)
+    knnModel.toNew(uid, numClasses)
+  }
+
+  override def fit(dataset: DataFrame): KNNClassificationModel = {
+    // Need to overwrite this method because we need to manually overwrite the buffer size
+    // because it is not supposed to stay the same as the Classifier if user sets it to -1.
+    transformSchema(dataset.schema, logging = true)
+    val model = train(dataset)
+    val bufferSize = model.getBufferSize
+    copyValues(model.setParent(this)).setBufferSize(bufferSize)
   }
 
   override def copy(extra: ParamMap): KNNClassifier = defaultCopy(extra)
@@ -120,7 +128,7 @@ class KNNClassificationModel private[ml](
                                           val subTrees: RDD[Tree],
                                           val _numClasses: Int
                                         ) extends ProbabilisticClassificationModel[Vector, KNNClassificationModel]
-with KNNParams with HasWeightCol with Serializable {
+with KNNModelParams with HasWeightCol with Serializable {
   require(subTrees.getStorageLevel != StorageLevel.NONE,
     "KNNModel is not designed to work with Trees that have not been cached")
 
@@ -138,7 +146,7 @@ with KNNParams with HasWeightCol with Serializable {
       if($(weightCol).isEmpty) {
         r => 1.0
       } else {
-        r => r.getDouble(1)
+        r => r.getDouble(1)  // should this be r.getAs[Double](weightCol) ?
       }
     }
 

@@ -8,6 +8,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.classification.KNNClassificationModel
 import org.apache.spark.mllib.knn.KNNUtils
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
 import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
@@ -52,7 +53,7 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
     *
     * @group param
    */
-  val maxDistance = new DoubleParam(this, "maxNeighbors", "maximum distance to find neighbors",
+  val maxDistance = new DoubleParam(this, "maxNeighbors", "maximum distance to find neighbors", // todo: maxDistance or maxNeighbors?
                                      ParamValidators.gt(0))
 
   /** @group getParam */
@@ -80,10 +81,10 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
       .flatMap {
         case (vector, index) =>
           val vectorWithNorm = new VectorWithNorm(vector)
-          val idx = KNN.searchIndecies(vectorWithNorm, topTree.value, $(bufferSize))
+          val idx = KNN.searchIndices(vectorWithNorm, topTree.value, $(bufferSize))
             .map(i => (i, (vectorWithNorm, index)))
 
-          assert(idx.nonEmpty, s"indices must be non-empty: $vector ($index)")
+          assert(idx.nonEmpty, s"indices must be non-empty: $vector ($index), buffer size: $getBufferSize")
           idx
       }
       .partitionBy(new HashPartitioner(subTrees.partitions.length))
@@ -154,7 +155,7 @@ private[ml] trait KNNParams extends KNNModelParams with HasSeed {
     *
     * @group param
     */
-  val bufferSizeSampleSizes = new Param[Array[Int]](this, "bufferSizeSampleSize",
+  val bufferSizeSampleSizes = new IntArrayParam(this, "bufferSizeSampleSize",  // todo: should this have an 's' at the end?
     "number of sample sizes to take when estimating buffer size", { arr: Array[Int] => arr.length > 1 && arr.forall(_ > 0) })
 
   /** @group getParam */
@@ -248,6 +249,10 @@ class KNNModel private[ml](
   override def copy(extra: ParamMap): KNNModel = {
     val copied = new KNNModel(uid, topTree, subTrees)
     copyValues(copied, extra).setParent(parent)
+  }
+
+  def toNew(uid: String, numClasses: Int): KNNClassificationModel = {
+    copyValues(new KNNClassificationModel(uid, topTree, subTrees, numClasses))
   }
 }
 
@@ -499,7 +504,7 @@ object KNN extends Logging {
   }
 
   //TODO: Might want to make this tail recursive
-  private[ml] def searchIndecies(v: VectorWithNorm, tree: Tree, tau: Double, acc: Int = 0): Seq[Int] = {
+  private[ml] def searchIndices(v: VectorWithNorm, tree: Tree, tau: Double, acc: Int = 0): Seq[Int] = {
     tree match {
       case node: MetricTree =>
         val leftDistance = node.leftPivot.fastDistance(v)
@@ -507,11 +512,11 @@ object KNN extends Logging {
 
         val buffer = new ArrayBuffer[Int]
         if (leftDistance - rightDistance <= tau) {
-          buffer ++= searchIndecies(v, node.leftChild, tau, acc)
+          buffer ++= searchIndices(v, node.leftChild, tau, acc)
         }
 
         if (rightDistance - leftDistance <= tau) {
-          buffer ++= searchIndecies(v, node.rightChild, tau, acc + node.leftChild.leafCount)
+          buffer ++= searchIndices(v, node.rightChild, tau, acc + node.leftChild.leafCount)
         }
 
         buffer
