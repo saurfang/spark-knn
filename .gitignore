@@ -23,3 +23,6 @@ project/plugins/project/
 __pycache__/
 *.py[cod]
 *$py.class
+python/build/
+python/dist/
+*.egg-info/
