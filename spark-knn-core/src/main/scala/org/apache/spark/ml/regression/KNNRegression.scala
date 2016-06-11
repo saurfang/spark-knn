@@ -2,7 +2,7 @@ package org.apache.spark.ml.regression
 
 import org.apache.spark.Logging
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.ml.knn.{KNN, KNNParams, Tree}
+import org.apache.spark.ml.knn.{KNN, KNNParams, KNNModelParams, Tree}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.util.Identifiable
