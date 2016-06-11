@@ -454,12 +454,13 @@ object KNN extends Logging {
     val rs = math.exp(alpha + beta * math.log(total))
 
     if (beta > 0) {
+      val yMax = breeze.linalg.max(y)
       logError(
         s"""Unable to estimate Tau with positive beta: $beta. This maybe because data is too small.
-           |Setting to $ymean which is the average distance we found in the sample.
+           |Setting to $yMax which is the maximum average distance we found in the sample.
            |This may leads to poor accuracy. Consider manually set bufferSize instead.
            |You can also try setting balanceThreshold to zero so only metric trees are built.""".stripMargin)
-      ymean
+      yMax
     } else {
       // c = alpha, d = - 1 / beta
       rs / math.sqrt(-1 / beta)
