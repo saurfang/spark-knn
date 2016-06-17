@@ -127,7 +127,7 @@ class KNNSuite extends FunSuite with SharedSparkContext with Matchers with Loggi
       .setSubTreeLeafSize(leafSize)
       .setBalanceThreshold(0)
     val model = knn.fit(createDataFrame().withColumn("label", lit(1.0)))
-    model.getBufferSize shouldBe -1.0
+    model.getBufferSize shouldBe 0.0
   }
 
   private[this] def checkKNN(fit: DataFrame => PredictionModel[_, _]): Unit = {

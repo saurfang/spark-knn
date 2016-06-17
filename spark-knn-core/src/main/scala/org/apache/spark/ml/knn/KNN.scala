@@ -343,13 +343,14 @@ class KNN(override val uid: String) extends Estimator[KNNModel] with KNNParams {
     val topTree = MetricTree.build(sampled, $(topTreeLeafSize), rand.nextLong())
     //build partitioner using top-level tree
     val part = new KNNPartitioner(topTree)
+    //noinspection ScalaStyle
     val repartitioned = new ShuffledRDD[RowWithVector, Null, Null](data.map(v => (v, null)), part).keys
 
     val tau =
       if ($(balanceThreshold) > 0 && $(bufferSize) < 0) {
         KNN.estimateTau(data, $(bufferSizeSampleSizes), rand.nextLong())
       } else {
-        $(bufferSize)
+        math.max(0, $(bufferSize))
       }
     logInfo("Tau is: " + tau)
 
