@@ -73,8 +73,16 @@ with KNNParams with HasWeightCol with Logging {
 
   override protected def train(dataset: DataFrame): KNNRegressionModel = {
     val knnModel = copyValues(new KNN()).fit(dataset)
-    val model = new KNNRegressionModel(uid, knnModel.topTree, knnModel.subTrees)
-    copyValues(model).setBufferSize(knnModel.getBufferSize)
+    knnModel.toNewRegressionModel(uid)
+  }
+
+  override def fit(dataset: DataFrame): KNNRegressionModel = {
+    // Need to overwrite this method because we need to manually overwrite the buffer size
+    // because it is not supposed to stay the same as the Regressor if user sets it to -1.
+    transformSchema(dataset.schema, logging = true)
+    val model = train(dataset)
+    val bufferSize = model.getBufferSize
+    copyValues(model.setParent(this)).setBufferSize(bufferSize)
   }
 
   override def copy(extra: ParamMap): KNNRegression = defaultCopy(extra)

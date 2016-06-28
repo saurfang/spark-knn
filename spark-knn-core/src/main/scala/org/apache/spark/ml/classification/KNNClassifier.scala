@@ -107,7 +107,7 @@ with KNNParams with HasWeightCol with Logging {
     }
 
     val knnModel = copyValues(new KNN()).fit(dataset)
-    knnModel.toNew(uid, numClasses)
+    knnModel.toNewClassificationModel(uid, numClasses)
   }
 
   override def fit(dataset: DataFrame): KNNClassificationModel = {

@@ -9,6 +9,7 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.classification.KNNClassificationModel
+import org.apache.spark.ml.regression.KNNRegressionModel
 import org.apache.spark.mllib.knn.KNNUtils
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
 import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
@@ -251,8 +252,12 @@ class KNNModel private[ml](
     copyValues(copied, extra).setParent(parent)
   }
 
-  def toNew(uid: String, numClasses: Int): KNNClassificationModel = {
+  def toNewClassificationModel(uid: String, numClasses: Int): KNNClassificationModel = {
     copyValues(new KNNClassificationModel(uid, topTree, subTrees, numClasses))
+  }
+
+  def toNewRegressionModel(uid: String): KNNRegressionModel = {
+    copyValues(new KNNRegressionModel(uid, topTree, subTrees))
   }
 }
 
