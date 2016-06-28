@@ -47,7 +47,7 @@ class KNNRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
 
 class KNNRegressionModel(JavaModel):
     """
-    Model fitted by KNNClassifier.
+    Model fitted by KNNRegression.
     """
     def __init__(self, java_model):
         super(KNNRegressionModel, self).__init__(java_model)
