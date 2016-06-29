@@ -85,7 +85,7 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
           val idx = KNN.searchIndices(vectorWithNorm, topTree.value, $(bufferSize))
             .map(i => (i, (vectorWithNorm, index)))
 
-          assert(idx.nonEmpty, s"indices must be non-empty: $vector ($index), buffer size: $getBufferSize")
+          assert(idx.nonEmpty, s"indices must be non-empty: $vector ($index)")
           idx
       }
       .partitionBy(new HashPartitioner(subTrees.partitions.length))
