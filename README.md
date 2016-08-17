@@ -62,6 +62,20 @@ The number of neighbors can be set before and after training. Other parameters m
 the number of partitions and trade off between accuracy and efficiency of individual search tree. 
 Please refer to Scala doc for more information.
 
+## Using the Python interface with spark-submit
+
+To run a Spark script in Python with `spark-submit`, use:
+
+```
+cd python
+python setup.py bdist_egg
+cd ..
+sbt package
+
+# need to add jar twice because of https://issues.apache.org/jira/browse/SPARK-5185:
+spark-submit --pyfiles python/dist/pyspark_knn-*.egg --driver-class-path spark-knn-core/target/scala-2.10/spark-knn_*.jar --jars spark-knn-core/target/scala-2.10/spark-knn_*.jar YOUR_SCRIPT
+```
+
 ## Benchmark
 
 Preliminary benchmark results can be found at [here](data/mnist/benchmark.md).

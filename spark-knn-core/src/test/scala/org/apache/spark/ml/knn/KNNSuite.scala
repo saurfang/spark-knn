@@ -113,9 +113,6 @@ class KNNSuite extends FunSuite with SharedSparkContext with Matchers with Loggi
     val model = knn.fit(createDataFrame().withColumn("label", lit(1.0)))
     // check pre-set parameters are correctly copied
     model.getK shouldBe 2
-    model.getTopTreeSize shouldBe (data.size / 10)
-    model.getTopTreeLeafSize shouldBe leafSize
-    model.getSubTreeLeafSize shouldBe leafSize
     // check auto generated buffer size is correctly transferred
     model.getBufferSize should be > 0.0
   }
