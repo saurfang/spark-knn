@@ -142,11 +142,12 @@ with KNNModelParams with HasWeightCol with Serializable {
 
   //TODO: This can benefit from DataSet API in Spark 1.6
   override def transform(dataset: DataFrame): DataFrame = {
+    // FIXME: weightCol is not correctly used when set
     val getWeight: Row => Double = {
       if($(weightCol).isEmpty) {
         r => 1.0
       } else {
-        r => r.getDouble(1)  // should this be r.getAs[Double](weightCol) ?
+        r => r.getDouble(1)
       }
     }
 
