@@ -1,7 +1,6 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.ml.Predictor
 import org.apache.spark.ml.knn._
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasWeightCol
@@ -150,7 +149,8 @@ with KNNModelParams with HasWeightCol with Serializable {
       }
     }
 
-    val merged = transform(dataset, topTree, subTrees)
+    val neighborDataset : RDD[(Long, Array[Row])] = transform(dataset, topTree, subTrees)
+    val merged = neighborDataset
       .map {
         case (id, labels) =>
           val vector = new Array[Double](numClasses)

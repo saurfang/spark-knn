@@ -113,7 +113,8 @@ with KNNModelParams with HasWeightCol with Serializable {
       }
     }
 
-    val merged = transform(dataset, topTree, subTrees)
+    val neighborDataset : RDD[(Long, Array[Row])] = transform(dataset, topTree, subTrees)
+    val merged = neighborDataset
       .map {
         case (id, labels) =>
           var i = 0
@@ -147,7 +148,8 @@ with KNNModelParams with HasWeightCol with Serializable {
   }
 
   override protected def predict(features: Vector): Double = {
-    val results = transform(subTrees.context.parallelize(Seq(features)), topTree, subTrees).first()._2
+    val neighborDataset : RDD[(Long, Array[Row])] = transform(subTrees.context.parallelize(Seq(features)), topTree, subTrees)
+    val results = neighborDataset.first()._2
     val labels = results.map(_.getDouble(0))
     labels.sum / labels.length
   }
