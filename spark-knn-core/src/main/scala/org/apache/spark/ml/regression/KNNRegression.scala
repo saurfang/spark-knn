@@ -1,15 +1,14 @@
 package org.apache.spark.ml.regression
 
-import org.apache.spark.Logging
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.ml.knn.{KNN, KNNParams, KNNModelParams, Tree}
+import org.apache.spark.ml.knn.{KNN, KNNModelParams, KNNParams, Tree}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.{PredictionModel, Predictor}
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -17,7 +16,7 @@ import org.apache.spark.storage.StorageLevel
   * The output value is simply the average of the values of its k nearest neighbors.
   */
 class KNNRegression(override val uid: String) extends Predictor[Vector, KNNRegression, KNNRegressionModel]
-with KNNParams with HasWeightCol with Logging {
+with KNNParams with HasWeightCol {
   def this() = this(Identifiable.randomUID("knnr"))
 
   /** @group setParam */
@@ -71,12 +70,12 @@ with KNNParams with HasWeightCol with Logging {
   /** @group setParam */
   def setSeed(value: Long): this.type = set(seed, value)
 
-  override protected def train(dataset: DataFrame): KNNRegressionModel = {
+  override protected def train(dataset: Dataset[_]): KNNRegressionModel = {
     val knnModel = copyValues(new KNN()).fit(dataset)
     knnModel.toNewRegressionModel(uid)
   }
 
-  override def fit(dataset: DataFrame): KNNRegressionModel = {
+  override def fit(dataset: Dataset[_]): KNNRegressionModel = {
     // Need to overwrite this method because we need to manually overwrite the buffer size
     // because it is not supposed to stay the same as the Regressor if user sets it to -1.
     transformSchema(dataset.schema, logging = true)
@@ -104,7 +103,7 @@ with KNNModelParams with HasWeightCol with Serializable {
   def setBufferSize(value: Double): this.type = set(bufferSize, value)
 
   //TODO: This can benefit from DataSet API in Spark 1.6
-  override def transformImpl(dataset: DataFrame): DataFrame = {
+  override def transformImpl(dataset: Dataset[_]): DataFrame = {
     val getWeight: Row => Double = {
       if($(weightCol).isEmpty) {
         r => 1.0
@@ -133,7 +132,7 @@ with KNNModelParams with HasWeightCol with Serializable {
       }
 
     dataset.sqlContext.createDataFrame(
-      dataset.rdd.zipWithIndex().map { case (row, i) => (i, row) }
+      dataset.toDF().rdd.zipWithIndex().map { case (row, i) => (i, row) }
         .leftOuterJoin(merged) //make sure we don't lose any observations
         .map {
         case (i, (row, value)) => Row.fromSeq(row.toSeq :+ value.get)

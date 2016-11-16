@@ -5,17 +5,25 @@ import org.apache.spark.ml.classification.KNNClassifier
 import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.ml.knn.KNN.VectorWithNorm
 import org.apache.spark.ml.regression.KNNRegression
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
-import org.apache.spark.{Logging, SharedSparkContext}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.log4j
 import org.scalatest.{FunSuite, Matchers}
 
 import scala.collection.mutable
 
 
-class KNNSuite extends FunSuite with SharedSparkContext with Matchers with Logging {
+class KNNSuite extends FunSuite with Matchers  {
+
+  val logger = log4j.Logger.getLogger(getClass)
+
+  val spark = SparkSession.builder()
+    .master("local")
+    .getOrCreate()
+
+  val sc = spark.sparkContext
 
   private[this] val data = (-10 to 10).flatMap(i => (-10 to 10).map(j => Vectors.dense(i, j)))
   private[this] val leafSize = 5
@@ -38,7 +46,7 @@ class KNNSuite extends FunSuite with SharedSparkContext with Matchers with Loggi
         val vector = row.getAs[Vector](3)
         val neighbors = row.getAs[mutable.WrappedArray[Row]](4)
         if (neighbors.isEmpty) {
-          logError(vector.toString)
+          logger.error(vector.toString)
         }
         neighbors.length shouldBe 1
         val neighbor = neighbors.head.getAs[Vector](0)
@@ -64,13 +72,13 @@ class KNNSuite extends FunSuite with SharedSparkContext with Matchers with Loggi
         val vector = row.getAs[Vector](3)
         val neighbors = row.getAs[mutable.WrappedArray[Row]](4)
         if (neighbors.isEmpty) {
-          logError(vector.toString)
+          logger.error(vector.toString)
         }
 
         val numEdges = vector.toArray.map(math.abs).count(_ == 10)
         if (neighbors.length > 5 - numEdges) {
-          logError(vector.toString)
-          logError(neighbors.toList.toString)
+          logger.error(vector.toString)
+          logger.error(neighbors.toList.toString)
         }
         neighbors.length should be <= 5 - numEdges
 
@@ -142,13 +150,12 @@ class KNNSuite extends FunSuite with SharedSparkContext with Matchers with Loggi
   }
 
   private[this] def createDataFrame(): DataFrame = {
-    val sqlContext = new SQLContext(sc)
     val rdd = sc.parallelize(data.map(v => Row(v.toArray: _*)))
     val assembler = new VectorAssembler()
       .setInputCols(Array("x", "y"))
       .setOutputCol("features")
     assembler.transform(
-      sqlContext.createDataFrame(rdd,
+      spark.createDataFrame(rdd,
         StructType(
           Seq(
             StructField("x", DoubleType),

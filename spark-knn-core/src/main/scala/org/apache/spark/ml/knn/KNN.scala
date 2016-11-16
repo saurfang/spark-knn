@@ -10,16 +10,16 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.regression.KNNRegressionModel
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.mllib.knn.KNNUtils
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
+import org.apache.spark.ml.linalg.{Vector, VectorUDT, Vectors}
 import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.XORShiftRandom
 import org.apache.spark.{HashPartitioner, Partitioner}
-import org.apache.spark.Logging
+import org.apache.log4j
+import org.apache.spark.mllib.knn.KNNUtils
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
@@ -142,11 +142,11 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
       .map { case (i, seq) => (i, seq) }
   }
 
-  private[ml] def transform(dataset: DataFrame, topTree: Broadcast[Tree], subTrees: RDD[Tree]): RDD[(Long, Array[Row])] = {
+  private[ml] def transform(dataset: Dataset[_], topTree: Broadcast[Tree], subTrees: RDD[Tree]): RDD[(Long, Array[Row])] = {
     transform(dataset.select($(featuresCol)).rdd.map(_.getAs[Vector](0)), topTree, subTrees)
   }
 
-  private[ml] def transform(dataset: DataFrame, topTree: Broadcast[Tree], subTrees: RDD[Tree])(implicit di: DummyImplicit): RDD[(Long, Array[(Row,Double)])] = {
+  private[ml] def transform(dataset: Dataset[_], topTree: Broadcast[Tree], subTrees: RDD[Tree])(implicit di: DummyImplicit): RDD[(Long, Array[(Row,Double)])] = {
     transform(dataset.select($(featuresCol)).rdd.map(_.getAs[Vector](0)), topTree, subTrees)
   }
 }
@@ -265,15 +265,15 @@ class KNNModel private[ml](
   def setBufferSize(value: Double): this.type = set(bufferSize, value)
 
   //TODO: All these can benefit from DataSet API in Spark 1.6
-  override def transform(dataset: DataFrame): DataFrame = transform(dataset, withDistance = false)
+  override def transform(dataset: Dataset[_]): DataFrame = transform(dataset, withDistance = false)
 
-  def transform(dataset: DataFrame, withDistance : Boolean) : DataFrame = {
+  def transform(dataset: Dataset[_], withDistance : Boolean) : DataFrame = {
     val merged =
     if (withDistance){val mergedDist : RDD[(Long, Array[(Row,Double)])] = transform(dataset, topTree, subTrees); mergedDist
     } else {val mergedWithoutDist : RDD[(Long, Array[Row])] = transform(dataset, topTree, subTrees); mergedWithoutDist}
 
     dataset.sqlContext.createDataFrame(
-      dataset.rdd.zipWithIndex().map { case (row, i) => (i, row) }
+      dataset.toDF().rdd.zipWithIndex().map { case (row, i) => (i, row) }
         .leftOuterJoin(merged.asInstanceOf[RDD[(Long,Array[Any])]])
         .map {
           case (i, (row, neighbors)) =>
@@ -384,10 +384,11 @@ class KNN(override val uid: String) extends Estimator[KNNModel] with KNNParams {
   /** @group setParam */
   def setSeed(value: Long): this.type = set(seed, value)
 
-  override def fit(dataset: DataFrame): KNNModel = {
+  override def fit(dataset: Dataset[_]): KNNModel = {
     val rand = new XORShiftRandom($(seed))
     //prepare data for model estimation
     val data = dataset.selectExpr($(featuresCol), $(inputCols).mkString("struct(", ",", ")"))
+      .rdd
       .map(row => new RowWithVector(row.getAs[Vector](0), row.getStruct(1)))
     //sample data to build top-level tree
     val sampled = data.sample(withReplacement = false, $(topTreeSize).toDouble / dataset.count(), rand.nextLong()).collect()
@@ -428,7 +429,9 @@ class KNN(override val uid: String) extends Estimator[KNNModel] with KNNParams {
 }
 
 
-object KNN extends Logging {
+object KNN {
+
+  val logger = log4j.Logger.getLogger(classOf[KNN])
 
   /**
     * VectorWithNorm can use more efficient algorithm to calculate distance
@@ -507,7 +510,7 @@ object KNN extends Logging {
 
     if (beta > 0) {
       val yMax = breeze.linalg.max(y)
-      logError(
+      logger.error(
         s"""Unable to estimate Tau with positive beta: $beta. This maybe because data is too small.
             |Setting to $yMax which is the maximum average distance we found in the sample.
             |This may leads to poor accuracy. Consider manually set bufferSize instead.

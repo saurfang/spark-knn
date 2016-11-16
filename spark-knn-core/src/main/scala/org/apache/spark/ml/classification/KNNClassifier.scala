@@ -5,13 +5,13 @@ import org.apache.spark.ml.knn._
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
-import org.apache.spark.mllib.linalg._
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.{DoubleType, StructType}
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.SparkException
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -21,7 +21,8 @@ import scala.collection.mutable.ArrayBuffer
   * the class most common among its k nearest neighbors.
   */
 class KNNClassifier(override val uid: String) extends ProbabilisticClassifier[Vector, KNNClassifier, KNNClassificationModel]
-with KNNParams with HasWeightCol with Logging {
+with KNNParams with HasWeightCol {
+
   def this() = this(Identifiable.randomUID("knnc"))
 
   /** @group setParam */
@@ -75,7 +76,7 @@ with KNNParams with HasWeightCol with Logging {
   /** @group setParam */
   def setSeed(value: Long): this.type = set(seed, value)
 
-  override protected def train(dataset: DataFrame): KNNClassificationModel = {
+  override protected def train(dataset: Dataset[_]): KNNClassificationModel = {
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
     val instances = extractLabeledPoints(dataset).map {
       case LabeledPoint(label: Double, features: Vector) => (label, features)
@@ -109,7 +110,7 @@ with KNNParams with HasWeightCol with Logging {
     knnModel.toNewClassificationModel(uid, numClasses)
   }
 
-  override def fit(dataset: DataFrame): KNNClassificationModel = {
+  override def fit(dataset: Dataset[_]): KNNClassificationModel = {
     // Need to overwrite this method because we need to manually overwrite the buffer size
     // because it is not supposed to stay the same as the Classifier if user sets it to -1.
     transformSchema(dataset.schema, logging = true)
@@ -140,7 +141,7 @@ with KNNModelParams with HasWeightCol with Serializable {
   override def numClasses: Int = _numClasses
 
   //TODO: This can benefit from DataSet API in Spark 1.6
-  override def transform(dataset: DataFrame): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = {
     val getWeight: Row => Double = {
       if($(weightCol).isEmpty) {
         r => 1.0
@@ -178,7 +179,7 @@ with KNNModelParams with HasWeightCol with Serializable {
       }
 
     dataset.sqlContext.createDataFrame(
-      dataset.rdd.zipWithIndex().map { case (row, i) => (i, row) }
+      dataset.toDF().rdd.zipWithIndex().map { case (row, i) => (i, row) }
         .leftOuterJoin(merged) //make sure we don't lose any observations
         .map {
         case (i, (row, values)) => Row.fromSeq(row.toSeq ++ values.get)
