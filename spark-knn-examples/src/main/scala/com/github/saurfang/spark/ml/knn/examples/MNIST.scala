@@ -2,14 +2,16 @@ package com.github.saurfang.spark.ml.knn.examples
 
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.KNNClassifier
-import org.apache.spark.ml.feature.{PCA, VectorAssembler}
-import org.apache.spark.ml.knn.KNN
+import org.apache.spark.ml.feature.PCA
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
-import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.log4j
 
-object MNIST extends Logging {
+object MNIST {
+
+  val logger = log4j.Logger.getLogger(getClass)
+
   def main(args: Array[String]) {
     val conf = new SparkConf()
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
@@ -44,7 +46,7 @@ object MNIST extends Logging {
     val outofsample = validate(pipeline.transform(test))
 
     //reference accuracy: in-sample 95% out-of-sample 94%
-    logInfo(s"In-sample: $insample, Out-of-sample: $outofsample")
+    logger.info(s"In-sample: $insample, Out-of-sample: $outofsample")
   }
 
   private[this] def validate(results: DataFrame): Double = {

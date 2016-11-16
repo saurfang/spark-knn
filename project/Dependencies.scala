@@ -3,7 +3,7 @@ import Keys._
 
 object Dependencies {
   val Versions = Seq(
-    crossScalaVersions := Seq("2.10.5", "2.11.6"),
+    crossScalaVersions := Seq("2.11.8"),
     scalaVersion := crossScalaVersions.value.head
   )
 

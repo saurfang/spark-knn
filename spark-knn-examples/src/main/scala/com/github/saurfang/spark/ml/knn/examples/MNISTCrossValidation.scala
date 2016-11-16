@@ -7,9 +7,14 @@ import org.apache.spark.ml.feature.PCA
 import org.apache.spark.ml.tuning.{ParamGridBuilder, CrossValidator}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{DataFrame, SQLContext}
-import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext}
 
-object MNISTCrossValidation extends Logging {
+import org.apache.log4j
+
+object MNISTCrossValidation {
+
+  val logger = log4j.Logger.getLogger(getClass)
+
   def main(args: Array[String]) {
     val conf = new SparkConf()
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
@@ -56,8 +61,8 @@ object MNISTCrossValidation extends Logging {
     val outofsample = validate(cvModel.transform(test))
 
     //reference accuracy: in-sample 95% out-of-sample 94%
-    logInfo(s"In-sample: $insample, Out-of-sample: $outofsample")
-    logInfo(s"Cross-validated: ${cvModel.avgMetrics.toSeq}")
+    logger.info(s"In-sample: $insample, Out-of-sample: $outofsample")
+    logger.info(s"Cross-validated: ${cvModel.avgMetrics.toSeq}")
   }
 
   private[this] def validate(results: DataFrame): Double = {

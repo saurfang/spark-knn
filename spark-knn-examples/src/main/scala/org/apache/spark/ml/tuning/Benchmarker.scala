@@ -1,13 +1,12 @@
 package org.apache.spark.ml.tuning
 
 import com.github.fommil.netlib.F2jBLAS
-import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -34,7 +33,7 @@ private[ml] trait BenchmarkerParams extends ValidatorParams {
   */
 @Experimental
 class Benchmarker(override val uid: String) extends Estimator[BenchmarkModel]
-with BenchmarkerParams with Logging {
+with BenchmarkerParams {
 
   def this() = this(Identifiable.randomUID("benchmark"))
 
@@ -52,7 +51,7 @@ with BenchmarkerParams with Logging {
   /** @group setParam */
   def setNumTimes(value: Int): this.type = set(numTimes, value)
 
-  override def fit(dataset: DataFrame): BenchmarkModel = {
+  override def fit(dataset: Dataset[_]): BenchmarkModel = {
     val schema = dataset.schema
     transformSchema(schema, logging = true)
     val sqlCtx = dataset.sqlContext
@@ -132,7 +131,7 @@ class BenchmarkModel private[ml](
     fastestModel.validateParams()
   }
 
-  override def transform(dataset: DataFrame): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     fastestModel.transform(dataset)
   }
