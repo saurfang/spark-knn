@@ -39,6 +39,16 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
   def getNeighborsCol: String = $(neighborsCol)
 
   /**
+    * Param for distance column that will create a distance column of each nearest neighbor
+    * Default: no distance column will be used
+    *
+    * @group param
+    */
+  val distanceCol = new Param[String](this, "distanceCol", "column that includes each neighbors' distance as an additional column")
+
+  def getDistanceCol: String = $(distanceCol)
+
+  /**
     * Param for number of neighbors to find (> 0).
     * Default: 5
     *
@@ -77,16 +87,6 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
 
   /** @group getParam */
   def getBufferSize: Double = $(bufferSize)
-
-  /**
-    * Param for distance column that will create a distance column of each nearest neighbor
-    * Default: no distance column will be used
-    *
-    * @group param
-    */
-  val distanceCol = new Param[String](this, "distanceCol", "column that includes each neighbors' distance as an additional column")
-
-  def getDistanceColumn: String = $(distanceCol)
 
   private[ml] def transform(data: RDD[Vector], topTree: Broadcast[Tree], subTrees: RDD[Tree]): RDD[(Long, Array[(Row,Double)])] = {
     val searchData = data.zipWithIndex()
@@ -237,6 +237,9 @@ class KNNModel private[ml](
   def setNeighborsCol(value: String): this.type = set(neighborsCol, value)
 
   /** @group setParam */
+  def setDistanceCol(value: String): this.type = set(distanceCol, value)
+
+  /** @group setParam */
   def setK(value: Int): this.type = set(k, value)
 
   /** @group setParam */
@@ -354,9 +357,6 @@ class KNN(override val uid: String) extends Estimator[KNNModel] with KNNParams {
 
   /** @group setParam */
   def setAuxCols(value: Array[String]): this.type = set(inputCols, value)
-
-  /** @group setParam */
-  def setDistanceCol(value: String): this.type = set(distanceCol, value)
 
   /** @group setParam */
   def setTopTreeSize(value: Int): this.type = set(topTreeSize, value)
