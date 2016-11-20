@@ -92,14 +92,14 @@ with BenchmarkerParams {
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     $(estimator).transformSchema(schema)
   }
 
   override def validateParams(): Unit = {
-    super.validateParams()
     val est = $(estimator)
     for (paramMap <- $(estimatorParamMaps)) {
-      est.copy(paramMap).validateParams()
+      est.copy(paramMap)
     }
   }
 
@@ -126,10 +126,6 @@ class BenchmarkModel private[ml](
                                   val avgTrainingRuntimes: Array[Double],
                                   val avgEvaluationRuntimes: Array[Double])
   extends Model[BenchmarkModel] with BenchmarkerParams {
-
-  override def validateParams(): Unit = {
-    fastestModel.validateParams()
-  }
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
