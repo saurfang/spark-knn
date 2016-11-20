@@ -150,8 +150,8 @@ with KNNModelParams with HasWeightCol with Serializable {
       }
     }
 
-    val neighborDataset : RDD[(Long, Array[Row])] = transform(dataset, topTree, subTrees)
-    val merged = neighborDataset
+    val neighborRDD : RDD[(Long, Array[Row])] = transform(dataset, topTree, subTrees)
+    val merged = neighborRDD
       .map {
         case (id, labels) =>
           val vector = new Array[Double](numClasses)
