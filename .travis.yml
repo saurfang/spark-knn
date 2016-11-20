@@ -11,9 +11,9 @@ cache:
     - $HOME/.sbt/boot/
 script:
   - sbt -jvm-opts travis/jvmopts.compile compile
-  - sbt -jvm-opts travis/jvmopts.test coverage core/test
+  - sbt -jvm-opts travis/jvmopts.test coverage core/test coverageReport
   - sbt -jvm-opts travis/jvmopts.test scalastyle
   - find $HOME/.sbt -name "*.lock" | xargs rm
   - find $HOME/.ivy2 -name "ivydata-*.properties" | xargs rm
 after_success:
-  - pip install --user codecov && codecov
+  - bash <(curl -s https://codecov.io/bash)

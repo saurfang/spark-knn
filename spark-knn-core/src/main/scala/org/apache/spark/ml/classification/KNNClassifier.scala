@@ -146,7 +146,7 @@ with KNNModelParams with HasWeightCol with Serializable {
       if($(weightCol).isEmpty) {
         r => 1.0
       } else {
-        r => r.getDouble(1)  // should this be r.getAs[Double](weightCol) ?
+        r => r.getDouble(1)
       }
     }
 
