@@ -9,8 +9,7 @@ import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.{Pipeline, Transformer}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, Dataset, SQLContext}
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.log4j
 
 import scala.collection.mutable
@@ -28,11 +27,9 @@ object MNISTBenchmark {
     val numPartitions = if(args.length >= 3) args(2).toInt else 10
     val models = if(args.length >=4) args(3).split(',') else Array("tree","naive")
 
-    val conf = new SparkConf()
-      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
+    val spark = SparkSession.builder().getOrCreate()
+    val sc = spark.sparkContext
+    import spark.implicits._
 
     //read in raw label and features
     val dataset = MLUtils.loadLibSVMFile(sc, path)
