@@ -500,7 +500,7 @@ object KNN {
     val alpha = ymean - beta * xmean
     val rs = math.exp(alpha + beta * math.log(total))
 
-    if (beta > 0) {
+    if (beta > 0 || beta.isNaN || rs.isNaN) {
       val yMax = breeze.linalg.max(y)
       logger.error(
         s"""Unable to estimate Tau with positive beta: $beta. This maybe because data is too small.
