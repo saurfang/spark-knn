@@ -78,39 +78,17 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
   /** @group getParam */
   def getBufferSize: Double = $(bufferSize)
 
-  private[ml] def transform(data: RDD[Vector], topTree: Broadcast[Tree], subTrees: RDD[Tree]): RDD[(Long, Array[Row])] = {
-    val searchData = data.zipWithIndex()
-      .flatMap {
-        case (vector, index) =>
-          val vectorWithNorm = new VectorWithNorm(vector)
-          val idx = KNN.searchIndices(vectorWithNorm, topTree.value, $(bufferSize))
-            .map(i => (i, (vectorWithNorm, index)))
+  /**
+    * Param for distance column that will create a distance column of each nearest neighbor
+    * Default: no distance column will be used
+    *
+    * @group param
+    */
+  val distanceCol = new Param[String](this, "distanceCol", "column that includes each neighbors' distance as an additional column")
 
-          assert(idx.nonEmpty, s"indices must be non-empty: $vector ($index)")
-          idx
-      }
-      .partitionBy(new HashPartitioner(subTrees.partitions.length))
+  def getDistanceColumn: String = $(distanceCol)
 
-    // for each partition, search points within corresponding child tree
-    val results = searchData.zipPartitions(subTrees) {
-      (childData, trees) =>
-        val tree = trees.next()
-        assert(!trees.hasNext)
-        childData.flatMap {
-          case (_, (point, i)) =>
-            tree.query(point, $(k)).collect {
-              case (neighbor, distance) if distance <= $(maxDistance) =>
-                (i, (neighbor.row, distance))
-            }
-        }
-    }
-
-    // merge results by point index together and keep topK results
-    results.topByKey($(k))(Ordering.by(-_._2))
-      .map { case (i, seq) => (i, seq.map(_._1)) }
-  }
-
-  private[ml] def transform(data: RDD[Vector], topTree: Broadcast[Tree], subTrees: RDD[Tree])(implicit di: DummyImplicit): RDD[(Long, Array[(Row,Double)])] = {
+  private[ml] def transform(data: RDD[Vector], topTree: Broadcast[Tree], subTrees: RDD[Tree]): RDD[(Long, Array[(Row,Double)])] = {
     val searchData = data.zipWithIndex()
       .flatMap {
         case (vector, index) =>
@@ -142,13 +120,10 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
       .map { case (i, seq) => (i, seq) }
   }
 
-  private[ml] def transform(dataset: Dataset[_], topTree: Broadcast[Tree], subTrees: RDD[Tree]): RDD[(Long, Array[Row])] = {
+  private[ml] def transform(dataset: Dataset[_], topTree: Broadcast[Tree], subTrees: RDD[Tree]): RDD[(Long, Array[(Row, Double)])] = {
     transform(dataset.select($(featuresCol)).rdd.map(_.getAs[Vector](0)), topTree, subTrees)
   }
 
-  private[ml] def transform(dataset: Dataset[_], topTree: Broadcast[Tree], subTrees: RDD[Tree])(implicit di: DummyImplicit): RDD[(Long, Array[(Row,Double)])] = {
-    transform(dataset.select($(featuresCol)).rdd.map(_.getAs[Vector](0)), topTree, subTrees)
-  }
 }
 
 private[ml] trait KNNParams extends KNNModelParams with HasSeed {
@@ -215,7 +190,7 @@ private[ml] trait KNNParams extends KNNModelParams with HasSeed {
 
   setDefault(topTreeSize -> 1000, topTreeLeafSize -> 10, subTreeLeafSize -> 30,
     bufferSize -> -1.0, bufferSizeSampleSizes -> (100 to 1000 by 100).toArray, balanceThreshold -> 0.7,
-    k -> 5, neighborsCol -> "neighbors", maxDistance -> Double.PositiveInfinity)
+    k -> 5, neighborsCol -> "neighbors", distanceCol -> "", maxDistance -> Double.PositiveInfinity)
 
   /**
     * Validates and transforms the input schema.
@@ -226,7 +201,13 @@ private[ml] trait KNNParams extends KNNModelParams with HasSeed {
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     val auxFeatures = $(inputCols).map(c => schema(c))
-    SchemaUtils.appendColumn(schema, $(neighborsCol), ArrayType(StructType(auxFeatures)))
+    val schema2 = SchemaUtils.appendColumn(schema, $(neighborsCol), ArrayType(StructType(auxFeatures)))
+
+    if ($(distanceCol).isEmpty) {
+      schema2
+    } else {
+      SchemaUtils.appendColumn(schema2, $(distanceCol), ArrayType(DoubleType))
+    }
   }
 }
 
@@ -264,20 +245,23 @@ class KNNModel private[ml](
   /** @group setParam */
   def setBufferSize(value: Double): this.type = set(bufferSize, value)
 
-  //TODO: All these can benefit from DataSet API in Spark 1.6
-  override def transform(dataset: Dataset[_]): DataFrame = transform(dataset, withDistance = false)
+  //TODO: All these can benefit from DataSet API
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    val merged: RDD[(Long, Array[(Row,Double)])] = transform(dataset, topTree, subTrees)
 
-  def transform(dataset: Dataset[_], withDistance : Boolean) : DataFrame = {
-    val merged =
-    if (withDistance){val mergedDist : RDD[(Long, Array[(Row,Double)])] = transform(dataset, topTree, subTrees); mergedDist
-    } else {val mergedWithoutDist : RDD[(Long, Array[Row])] = transform(dataset, topTree, subTrees); mergedWithoutDist}
+    val withDistance = $(distanceCol).nonEmpty
 
     dataset.sqlContext.createDataFrame(
       dataset.toDF().rdd.zipWithIndex().map { case (row, i) => (i, row) }
-        .leftOuterJoin(merged.asInstanceOf[RDD[(Long,Array[Any])]])
+        .leftOuterJoin(merged.asInstanceOf[RDD[(Long,Array[(Row, Double)])]])
         .map {
-          case (i, (row, neighbors)) =>
-            Row.fromSeq(row.toSeq :+ neighbors.getOrElse(Array.empty))
+          case (i, (row, neighborsAndDistances)) =>
+            val (neighbors, distances) = neighborsAndDistances.map(_.unzip).getOrElse((Array.empty[Row], Array.empty[Double]))
+            if (withDistance) {
+              Row.fromSeq(row.toSeq :+ neighbors :+ distances)
+            } else {
+              Row.fromSeq(row.toSeq :+ neighbors)
+            }
         },
       transformSchema(dataset.schema)
     )
@@ -285,7 +269,12 @@ class KNNModel private[ml](
 
   override def transformSchema(schema: StructType): StructType = {
     val auxFeatures = $(inputCols).map(c => schema(c))
-    SchemaUtils.appendColumn(schema, $(neighborsCol), ArrayType(StructType(auxFeatures)))
+    val schema2 = SchemaUtils.appendColumn(schema, $(neighborsCol), ArrayType(StructType(auxFeatures)))
+    if ($(distanceCol).isEmpty) {
+      schema2
+    } else {
+      SchemaUtils.appendColumn(schema2, $(distanceCol), ArrayType(DoubleType))
+    }
   }
 
   override def copy(extra: ParamMap): KNNModel = {

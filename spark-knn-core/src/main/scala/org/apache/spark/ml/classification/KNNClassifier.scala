@@ -140,7 +140,7 @@ with KNNModelParams with HasWeightCol with Serializable {
 
   override def numClasses: Int = _numClasses
 
-  //TODO: This can benefit from DataSet API in Spark 1.6
+  //TODO: This can benefit from DataSet API
   override def transform(dataset: Dataset[_]): DataFrame = {
     val getWeight: Row => Double = {
       if($(weightCol).isEmpty) {
@@ -150,10 +150,11 @@ with KNNModelParams with HasWeightCol with Serializable {
       }
     }
 
-    val neighborRDD : RDD[(Long, Array[Row])] = transform(dataset, topTree, subTrees)
+    val neighborRDD : RDD[(Long, Array[(Row, Double)])] = transform(dataset, topTree, subTrees)
     val merged = neighborRDD
       .map {
-        case (id, labels) =>
+        case (id, labelsDists) =>
+          val (labels, _) = labelsDists.unzip
           val vector = new Array[Double](numClasses)
           var i = 0
           while (i < labels.length) {
