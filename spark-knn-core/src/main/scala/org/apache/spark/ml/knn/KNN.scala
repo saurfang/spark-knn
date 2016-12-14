@@ -3,13 +3,13 @@ package org.apache.spark.ml.knn
 import breeze.linalg.{DenseVector, Vector => BV}
 import breeze.stats._
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.ml.classification.KNNClassificationModel
 import org.apache.spark.ml.knn.KNN.{KNNPartitioner, RowWithVector, VectorWithNorm}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.regression.KNNRegressionModel
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.classification.KNNClassificationModel
-import org.apache.spark.ml.regression.KNNRegressionModel
 import org.apache.spark.mllib.knn.KNNUtils
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
 import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
@@ -18,7 +18,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.XORShiftRandom
-import org.apache.spark.{Logging, HashPartitioner, Partitioner}
+import org.apache.spark.{HashPartitioner, Partitioner}
+import org.apache.spark.Logging
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
@@ -109,7 +110,43 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
       .map { case (i, seq) => (i, seq.map(_._1)) }
   }
 
+  private[ml] def transform(data: RDD[Vector], topTree: Broadcast[Tree], subTrees: RDD[Tree])(implicit di: DummyImplicit): RDD[(Long, Array[(Row,Double)])] = {
+    val searchData = data.zipWithIndex()
+      .flatMap {
+        case (vector, index) =>
+          val vectorWithNorm = new VectorWithNorm(vector)
+          val idx = KNN.searchIndices(vectorWithNorm, topTree.value, $(bufferSize))
+            .map(i => (i, (vectorWithNorm, index)))
+
+          assert(idx.nonEmpty, s"indices must be non-empty: $vector ($index)")
+          idx
+      }
+      .partitionBy(new HashPartitioner(subTrees.partitions.length))
+
+    // for each partition, search points within corresponding child tree
+    val results = searchData.zipPartitions(subTrees) {
+      (childData, trees) =>
+        val tree = trees.next()
+        assert(!trees.hasNext)
+        childData.flatMap {
+          case (_, (point, i)) =>
+            tree.query(point, $(k)).collect {
+              case (neighbor, distance) if distance <= $(maxDistance) =>
+                (i, (neighbor.row, distance))
+            }
+        }
+    }
+
+    // merge results by point index together and keep topK results
+    results.topByKey($(k))(Ordering.by(-_._2))
+      .map { case (i, seq) => (i, seq) }
+  }
+
   private[ml] def transform(dataset: DataFrame, topTree: Broadcast[Tree], subTrees: RDD[Tree]): RDD[(Long, Array[Row])] = {
+    transform(dataset.select($(featuresCol)).rdd.map(_.getAs[Vector](0)), topTree, subTrees)
+  }
+
+  private[ml] def transform(dataset: DataFrame, topTree: Broadcast[Tree], subTrees: RDD[Tree])(implicit di: DummyImplicit): RDD[(Long, Array[(Row,Double)])] = {
     transform(dataset.select($(featuresCol)).rdd.map(_.getAs[Vector](0)), topTree, subTrees)
   }
 }
@@ -228,12 +265,16 @@ class KNNModel private[ml](
   def setBufferSize(value: Double): this.type = set(bufferSize, value)
 
   //TODO: All these can benefit from DataSet API in Spark 1.6
-  override def transform(dataset: DataFrame): DataFrame = {
-    val merged = transform(dataset, topTree, subTrees)
+  override def transform(dataset: DataFrame): DataFrame = transform(dataset, withDistance = false)
+
+  def transform(dataset: DataFrame, withDistance : Boolean) : DataFrame = {
+    val merged =
+    if (withDistance){val mergedDist : RDD[(Long, Array[(Row,Double)])] = transform(dataset, topTree, subTrees); mergedDist
+    } else {val mergedWithoutDist : RDD[(Long, Array[Row])] = transform(dataset, topTree, subTrees); mergedWithoutDist}
 
     dataset.sqlContext.createDataFrame(
       dataset.rdd.zipWithIndex().map { case (row, i) => (i, row) }
-        .leftOuterJoin(merged)
+        .leftOuterJoin(merged.asInstanceOf[RDD[(Long,Array[Any])]])
         .map {
           case (i, (row, neighbors)) =>
             Row.fromSeq(row.toSeq :+ neighbors.getOrElse(Array.empty))
@@ -349,7 +390,7 @@ class KNN(override val uid: String) extends Estimator[KNNModel] with KNNParams {
     val data = dataset.selectExpr($(featuresCol), $(inputCols).mkString("struct(", ",", ")"))
       .map(row => new RowWithVector(row.getAs[Vector](0), row.getStruct(1)))
     //sample data to build top-level tree
-    val sampled = data.sample(false, $(topTreeSize).toDouble / dataset.count(), rand.nextLong()).collect()
+    val sampled = data.sample(withReplacement = false, $(topTreeSize).toDouble / dataset.count(), rand.nextLong()).collect()
     val topTree = MetricTree.build(sampled, $(topTreeLeafSize), rand.nextLong())
     //build partitioner using top-level tree
     val part = new KNNPartitioner(topTree)
@@ -468,9 +509,9 @@ object KNN extends Logging {
       val yMax = breeze.linalg.max(y)
       logError(
         s"""Unable to estimate Tau with positive beta: $beta. This maybe because data is too small.
-           |Setting to $yMax which is the maximum average distance we found in the sample.
-           |This may leads to poor accuracy. Consider manually set bufferSize instead.
-           |You can also try setting balanceThreshold to zero so only metric trees are built.""".stripMargin)
+            |Setting to $yMax which is the maximum average distance we found in the sample.
+            |This may leads to poor accuracy. Consider manually set bufferSize instead.
+            |You can also try setting balanceThreshold to zero so only metric trees are built.""".stripMargin)
       yMax
     } else {
       // c = alpha, d = - 1 / beta
