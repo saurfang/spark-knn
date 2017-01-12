@@ -96,7 +96,7 @@ with BenchmarkerParams {
     $(estimator).transformSchema(schema)
   }
 
-  override def validateParams(): Unit = {
+  def validateParams(): Unit = {
     val est = $(estimator)
     for (paramMap <- $(estimatorParamMaps)) {
       est.copy(paramMap)
