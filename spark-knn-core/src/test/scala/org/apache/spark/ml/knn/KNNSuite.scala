@@ -92,6 +92,57 @@ class KNNSuite extends FunSuite with Matchers  {
     }
   }
 
+  test("KNN returns correct distance column values") {
+    val knn = new KNN()
+      .setTopTreeSize(data.size / 10)
+      .setTopTreeLeafSize(leafSize)
+      .setSubTreeLeafSize(leafSize)
+      .setAuxCols(Array("features"))
+
+    val df = createDataFrame()
+    val model = knn.fit(df).setK(6).setMaxDistance(1).setNeighborsCol("neighbors").setDistanceCol("distance")
+
+    val results = model.transform(df).collect()
+    results.length shouldBe data.size
+
+    results.foreach {
+      row =>
+        val vector = row.getAs[Vector](row.fieldIndex("features"))
+        val neighbors = row.getAs[mutable.WrappedArray[Row]](row.fieldIndex("neighbors"))
+        val distances = row.getAs[mutable.WrappedArray[Double]](row.fieldIndex("distance"))
+        if (neighbors.isEmpty) {
+          logger.error(vector.toString)
+        }
+
+        val numEdges = vector.toArray.map(math.abs).count(_ == 10)
+        if (neighbors.length > 5 - numEdges) {
+          logger.error(vector.toString)
+          logger.error(neighbors.toList.toString)
+        }
+        neighbors.length should be <= 5 - numEdges
+
+        if (distances.length != neighbors.length) {
+          logger.error(vector.toString)
+          logger.error(neighbors.toList.toString)
+          logger.error(distances.toList.toString)
+        }
+        distances.length should be (neighbors.length)
+
+        val closest = neighbors.head.getAs[Vector](0)
+        val closestDist = distances.head
+        val closestCalDist = new VectorWithNorm(vector).fastSquaredDistance(new VectorWithNorm(closest))
+        closestCalDist shouldEqual closestDist
+
+        val rest = neighbors.tail.map(_.getAs[Vector](0)).zip(distances.tail.toList)
+        rest.foreach {
+          case (neighbor, distance) =>
+            val sqDist = new VectorWithNorm(vector).fastSquaredDistance(new VectorWithNorm(neighbor))
+            sqDist shouldEqual 1.0 +- 1e-6
+            sqDist shouldEqual distance +- 1e-6
+        }
+    }
+  }
+
   test("KNNClassifier can be fitted with/without weight column") {
     val knn = new KNNClassifier()
       .setTopTreeSize(data.size / 10)

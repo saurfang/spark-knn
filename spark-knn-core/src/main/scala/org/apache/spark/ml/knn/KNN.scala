@@ -46,6 +46,7 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
     */
   val distanceCol = new Param[String](this, "distanceCol", "column that includes each neighbors' distance as an additional column")
 
+  /** @group getParam */
   def getDistanceCol: String = $(distanceCol)
 
   /**
@@ -201,12 +202,12 @@ private[ml] trait KNNParams extends KNNModelParams with HasSeed {
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     val auxFeatures = $(inputCols).map(c => schema(c))
-    val schema2 = SchemaUtils.appendColumn(schema, $(neighborsCol), ArrayType(StructType(auxFeatures)))
+    val schemaWithNeighbors = SchemaUtils.appendColumn(schema, $(neighborsCol), ArrayType(StructType(auxFeatures)))
 
     if ($(distanceCol).isEmpty) {
-      schema2
+      schemaWithNeighbors
     } else {
-      SchemaUtils.appendColumn(schema2, $(distanceCol), ArrayType(DoubleType))
+      SchemaUtils.appendColumn(schemaWithNeighbors, $(distanceCol), ArrayType(DoubleType))
     }
   }
 }
@@ -256,7 +257,7 @@ class KNNModel private[ml](
 
     dataset.sqlContext.createDataFrame(
       dataset.toDF().rdd.zipWithIndex().map { case (row, i) => (i, row) }
-        .leftOuterJoin(merged.asInstanceOf[RDD[(Long,Array[(Row, Double)])]])
+        .leftOuterJoin(merged)
         .map {
           case (i, (row, neighborsAndDistances)) =>
             val (neighbors, distances) = neighborsAndDistances.map(_.unzip).getOrElse((Array.empty[Row], Array.empty[Double]))
@@ -272,11 +273,11 @@ class KNNModel private[ml](
 
   override def transformSchema(schema: StructType): StructType = {
     val auxFeatures = $(inputCols).map(c => schema(c))
-    val schema2 = SchemaUtils.appendColumn(schema, $(neighborsCol), ArrayType(StructType(auxFeatures)))
+    val schemaWithNeighbors = SchemaUtils.appendColumn(schema, $(neighborsCol), ArrayType(StructType(auxFeatures)))
     if ($(distanceCol).isEmpty) {
-      schema2
+      schemaWithNeighbors
     } else {
-      SchemaUtils.appendColumn(schema2, $(distanceCol), ArrayType(DoubleType))
+      SchemaUtils.appendColumn(schemaWithNeighbors, $(distanceCol), ArrayType(DoubleType))
     }
   }
 
