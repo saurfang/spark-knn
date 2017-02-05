@@ -1,16 +1,16 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkException
-import org.apache.spark.ml.knn.KNN.{VectorWithNorm, RowWithVector}
-import org.apache.spark.ml.knn.{KNNParams, KNNModel}
+import org.apache.spark.ml.knn.KNN.{RowWithVector, VectorWithNorm}
+import org.apache.spark.ml.knn.{KNNModel, KNNParams}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.ml.{Model, Predictor}
-import org.apache.spark.mllib.linalg._
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.types.{DoubleType, ArrayType, StructType}
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, StructType}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
 
@@ -24,7 +24,7 @@ class NaiveKNNClassifier(override val uid: String) extends Predictor[Vector, Nai
 
   override def copy(extra: ParamMap): NaiveKNNClassifier = defaultCopy(extra)
 
-  override protected def train(dataset: DataFrame): NaiveKNNClassifierModel = {
+  override protected def train(dataset: Dataset[_]): NaiveKNNClassifierModel = {
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
     val instances = extractLabeledPoints(dataset).map {
       case LabeledPoint(label: Double, features: Vector) => (label, features)
@@ -68,11 +68,13 @@ class NaiveKNNClassifierModel(
                                val _numClasses: Int) extends ProbabilisticClassificationModel[Vector, NaiveKNNClassifierModel] {
   override def numClasses: Int = _numClasses
 
-  override def transform(dataset: DataFrame): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    import dataset.sparkSession.implicits._
+
     val features = dataset.select($(featuresCol))
       .map(r => new VectorWithNorm(r.getAs[Vector](0)))
 
-    val merged = features.zipWithUniqueId()
+    val merged = features.rdd.zipWithUniqueId()
       .cartesian(points)
       .map {
         case ((u, i), (label, v)) =>
@@ -107,7 +109,7 @@ class NaiveKNNClassifierModel(
       }
 
     dataset.sqlContext.createDataFrame(
-      dataset.rdd.zipWithUniqueId().map { case (row, i) => (i, row) }
+      dataset.toDF().rdd.zipWithUniqueId().map { case (row, i) => (i, row) }
         .leftOuterJoin(merged) //make sure we don't lose any observations
         .map {
         case (i, (row, values)) => Row.fromSeq(row.toSeq ++ values.get)

@@ -3,22 +3,23 @@ package org.apache.spark.ml.knn
 import breeze.linalg.{DenseVector, Vector => BV}
 import breeze.stats._
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.ml.classification.KNNClassificationModel
 import org.apache.spark.ml.knn.KNN.{KNNPartitioner, RowWithVector, VectorWithNorm}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.regression.KNNRegressionModel
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.classification.KNNClassificationModel
-import org.apache.spark.ml.regression.KNNRegressionModel
-import org.apache.spark.mllib.knn.KNNUtils
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
+import org.apache.spark.ml.linalg.{Vector, VectorUDT, Vectors}
 import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.XORShiftRandom
-import org.apache.spark.{Logging, HashPartitioner, Partitioner}
+import org.apache.spark.{HashPartitioner, Partitioner}
+import org.apache.log4j
+import org.apache.spark.mllib.knn.KNNUtils
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
@@ -36,6 +37,17 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
 
   /** @group getParam */
   def getNeighborsCol: String = $(neighborsCol)
+
+  /**
+    * Param for distance column that will create a distance column of each nearest neighbor
+    * Default: no distance column will be used
+    *
+    * @group param
+    */
+  val distanceCol = new Param[String](this, "distanceCol", "column that includes each neighbors' distance as an additional column")
+
+  /** @group getParam */
+  def getDistanceCol: String = $(distanceCol)
 
   /**
     * Param for number of neighbors to find (> 0).
@@ -77,7 +89,7 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
   /** @group getParam */
   def getBufferSize: Double = $(bufferSize)
 
-  private[ml] def transform(data: RDD[Vector], topTree: Broadcast[Tree], subTrees: RDD[Tree]): RDD[(Long, Array[Row])] = {
+  private[ml] def transform(data: RDD[Vector], topTree: Broadcast[Tree], subTrees: RDD[Tree]): RDD[(Long, Array[(Row,Double)])] = {
     val searchData = data.zipWithIndex()
       .flatMap {
         case (vector, index) =>
@@ -106,12 +118,13 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
 
     // merge results by point index together and keep topK results
     results.topByKey($(k))(Ordering.by(-_._2))
-      .map { case (i, seq) => (i, seq.map(_._1)) }
+      .map { case (i, seq) => (i, seq) }
   }
 
-  private[ml] def transform(dataset: DataFrame, topTree: Broadcast[Tree], subTrees: RDD[Tree]): RDD[(Long, Array[Row])] = {
+  private[ml] def transform(dataset: Dataset[_], topTree: Broadcast[Tree], subTrees: RDD[Tree]): RDD[(Long, Array[(Row, Double)])] = {
     transform(dataset.select($(featuresCol)).rdd.map(_.getAs[Vector](0)), topTree, subTrees)
   }
+
 }
 
 private[ml] trait KNNParams extends KNNModelParams with HasSeed {
@@ -178,7 +191,7 @@ private[ml] trait KNNParams extends KNNModelParams with HasSeed {
 
   setDefault(topTreeSize -> 1000, topTreeLeafSize -> 10, subTreeLeafSize -> 30,
     bufferSize -> -1.0, bufferSizeSampleSizes -> (100 to 1000 by 100).toArray, balanceThreshold -> 0.7,
-    k -> 5, neighborsCol -> "neighbors", maxDistance -> Double.PositiveInfinity)
+    k -> 5, neighborsCol -> "neighbors", distanceCol -> "", maxDistance -> Double.PositiveInfinity)
 
   /**
     * Validates and transforms the input schema.
@@ -189,7 +202,13 @@ private[ml] trait KNNParams extends KNNModelParams with HasSeed {
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     val auxFeatures = $(inputCols).map(c => schema(c))
-    SchemaUtils.appendColumn(schema, $(neighborsCol), ArrayType(StructType(auxFeatures)))
+    val schemaWithNeighbors = SchemaUtils.appendColumn(schema, $(neighborsCol), ArrayType(StructType(auxFeatures)))
+
+    if ($(distanceCol).isEmpty) {
+      schemaWithNeighbors
+    } else {
+      SchemaUtils.appendColumn(schemaWithNeighbors, $(distanceCol), ArrayType(DoubleType))
+    }
   }
 }
 
@@ -219,6 +238,9 @@ class KNNModel private[ml](
   def setNeighborsCol(value: String): this.type = set(neighborsCol, value)
 
   /** @group setParam */
+  def setDistanceCol(value: String): this.type = set(distanceCol, value)
+
+  /** @group setParam */
   def setK(value: Int): this.type = set(k, value)
 
   /** @group setParam */
@@ -227,16 +249,23 @@ class KNNModel private[ml](
   /** @group setParam */
   def setBufferSize(value: Double): this.type = set(bufferSize, value)
 
-  //TODO: All these can benefit from DataSet API in Spark 1.6
-  override def transform(dataset: DataFrame): DataFrame = {
-    val merged = transform(dataset, topTree, subTrees)
+  //TODO: All these can benefit from DataSet API
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    val merged: RDD[(Long, Array[(Row,Double)])] = transform(dataset, topTree, subTrees)
+
+    val withDistance = $(distanceCol).nonEmpty
 
     dataset.sqlContext.createDataFrame(
-      dataset.rdd.zipWithIndex().map { case (row, i) => (i, row) }
+      dataset.toDF().rdd.zipWithIndex().map { case (row, i) => (i, row) }
         .leftOuterJoin(merged)
         .map {
-          case (i, (row, neighbors)) =>
-            Row.fromSeq(row.toSeq :+ neighbors.getOrElse(Array.empty))
+          case (i, (row, neighborsAndDistances)) =>
+            val (neighbors, distances) = neighborsAndDistances.map(_.unzip).getOrElse((Array.empty[Row], Array.empty[Double]))
+            if (withDistance) {
+              Row.fromSeq(row.toSeq :+ neighbors :+ distances)
+            } else {
+              Row.fromSeq(row.toSeq :+ neighbors)
+            }
         },
       transformSchema(dataset.schema)
     )
@@ -244,7 +273,12 @@ class KNNModel private[ml](
 
   override def transformSchema(schema: StructType): StructType = {
     val auxFeatures = $(inputCols).map(c => schema(c))
-    SchemaUtils.appendColumn(schema, $(neighborsCol), ArrayType(StructType(auxFeatures)))
+    val schemaWithNeighbors = SchemaUtils.appendColumn(schema, $(neighborsCol), ArrayType(StructType(auxFeatures)))
+    if ($(distanceCol).isEmpty) {
+      schemaWithNeighbors
+    } else {
+      SchemaUtils.appendColumn(schemaWithNeighbors, $(distanceCol), ArrayType(DoubleType))
+    }
   }
 
   override def copy(extra: ParamMap): KNNModel = {
@@ -343,13 +377,14 @@ class KNN(override val uid: String) extends Estimator[KNNModel] with KNNParams {
   /** @group setParam */
   def setSeed(value: Long): this.type = set(seed, value)
 
-  override def fit(dataset: DataFrame): KNNModel = {
+  override def fit(dataset: Dataset[_]): KNNModel = {
     val rand = new XORShiftRandom($(seed))
     //prepare data for model estimation
     val data = dataset.selectExpr($(featuresCol), $(inputCols).mkString("struct(", ",", ")"))
+      .rdd
       .map(row => new RowWithVector(row.getAs[Vector](0), row.getStruct(1)))
     //sample data to build top-level tree
-    val sampled = data.sample(false, $(topTreeSize).toDouble / dataset.count(), rand.nextLong()).collect()
+    val sampled = data.sample(withReplacement = false, $(topTreeSize).toDouble / dataset.count(), rand.nextLong()).collect()
     val topTree = MetricTree.build(sampled, $(topTreeLeafSize), rand.nextLong())
     //build partitioner using top-level tree
     val part = new KNNPartitioner(topTree)
@@ -387,7 +422,9 @@ class KNN(override val uid: String) extends Estimator[KNNModel] with KNNParams {
 }
 
 
-object KNN extends Logging {
+object KNN {
+
+  val logger = log4j.Logger.getLogger(classOf[KNN])
 
   /**
     * VectorWithNorm can use more efficient algorithm to calculate distance
@@ -464,13 +501,13 @@ object KNN extends Logging {
     val alpha = ymean - beta * xmean
     val rs = math.exp(alpha + beta * math.log(total))
 
-    if (beta > 0) {
+    if (beta > 0 || beta.isNaN || rs.isNaN) {
       val yMax = breeze.linalg.max(y)
-      logError(
+      logger.error(
         s"""Unable to estimate Tau with positive beta: $beta. This maybe because data is too small.
-           |Setting to $yMax which is the maximum average distance we found in the sample.
-           |This may leads to poor accuracy. Consider manually set bufferSize instead.
-           |You can also try setting balanceThreshold to zero so only metric trees are built.""".stripMargin)
+            |Setting to $yMax which is the maximum average distance we found in the sample.
+            |This may leads to poor accuracy. Consider manually set bufferSize instead.
+            |You can also try setting balanceThreshold to zero so only metric trees are built.""".stripMargin)
       yMax
     } else {
       // c = alpha, d = - 1 / beta

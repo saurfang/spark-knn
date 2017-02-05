@@ -2,7 +2,7 @@ package org.apache.spark.ml.knn
 
 import breeze.linalg._
 import org.apache.spark.ml.knn.KNN._
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.util.random.XORShiftRandom
 
 import scala.collection.mutable
@@ -89,7 +89,7 @@ case class Leaf (data: IndexedSeq[RowWithVector],
 private[knn]
 object Leaf {
   def apply(data: IndexedSeq[RowWithVector]): Leaf = {
-    val vectors = data.map(_.vector.vector.toBreeze)
+    val vectors = data.map(_.vector.vector.asBreeze)
     val (minV, maxV) = vectors.foldLeft((vectors.head, vectors.head)) {
       case ((accMin, accMax), bv) =>
         (min(accMin, bv), max(accMax, bv))
@@ -176,7 +176,7 @@ object MetricTree {
         Leaf(data, randomPivot, 0.0)
       } else {
         val rightPivot = data.maxBy(v => leftPivot.fastSquaredDistance(v.vector)).vector
-        val pivot = new VectorWithNorm(Vectors.fromBreeze((leftPivot.vector.toBreeze + rightPivot.vector.toBreeze) / 2.0))
+        val pivot = new VectorWithNorm(Vectors.fromBreeze((leftPivot.vector.asBreeze + rightPivot.vector.asBreeze) / 2.0))
         val radius = math.sqrt(data.map(v => pivot.fastSquaredDistance(v.vector)).max)
         val (leftPartition, rightPartition) = data.partition{
           v => leftPivot.fastSquaredDistance(v.vector) < rightPivot.fastSquaredDistance(v.vector)
@@ -272,7 +272,7 @@ object SpillTree {
         Leaf(data, randomPivot, 0.0)
       } else {
         val rightPivot = data.maxBy(v => leftPivot.fastSquaredDistance(v.vector)).vector
-        val pivot = new VectorWithNorm(Vectors.fromBreeze((leftPivot.vector.toBreeze + rightPivot.vector.toBreeze) / 2.0))
+        val pivot = new VectorWithNorm(Vectors.fromBreeze((leftPivot.vector.asBreeze + rightPivot.vector.asBreeze) / 2.0))
         val radius = math.sqrt(data.map(v => pivot.fastSquaredDistance(v.vector)).max)
         val dataWithDistance = data.map(v =>
           (v, leftPivot.fastDistance(v.vector), rightPivot.fastDistance(v.vector))
@@ -325,7 +325,7 @@ object HybridTree {
         Leaf(data, randomPivot, 0.0)
       } else {
         val rightPivot = data.maxBy(v => leftPivot.fastSquaredDistance(v.vector)).vector
-        val pivot = new VectorWithNorm(Vectors.fromBreeze((leftPivot.vector.toBreeze + rightPivot.vector.toBreeze) / 2.0))
+        val pivot = new VectorWithNorm(Vectors.fromBreeze((leftPivot.vector.asBreeze + rightPivot.vector.asBreeze) / 2.0))
         val radius = math.sqrt(data.map(v => pivot.fastSquaredDistance(v.vector)).max)
         lazy val dataWithDistance = data.map(v =>
           (v, leftPivot.fastDistance(v.vector), rightPivot.fastDistance(v.vector))

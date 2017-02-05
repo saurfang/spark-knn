@@ -3,7 +3,7 @@ import Keys._
 
 object Dependencies {
   val Versions = Seq(
-    crossScalaVersions := Seq("2.10.5", "2.11.6"),
+    crossScalaVersions := Seq("2.11.8", "2.10.6"),
     scalaVersion := crossScalaVersions.value.head
   )
 
@@ -12,7 +12,7 @@ object Dependencies {
 
     object Test {
       val scalatest = "org.scalatest" %% "scalatest" % "2.2.4" % "test"
-      val sparktest = "org.apache.spark" %% "spark-core" % "1.6.0"  % "test" classifier "tests"
+      val sparktest = "org.apache.spark" %% "spark-core" % "2.1.0"  % "test" classifier "tests"
     }
   }
 

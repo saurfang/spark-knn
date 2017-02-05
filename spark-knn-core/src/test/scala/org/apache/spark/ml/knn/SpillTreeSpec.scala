@@ -1,7 +1,7 @@
 package org.apache.spark.ml.knn
 
 import org.apache.spark.ml.knn.KNN.RowWithVector
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.linalg.Vectors
 import org.scalatest.{FunSpec, Matchers}
 
 class SpillTreeSpec extends FunSpec with Matchers {
