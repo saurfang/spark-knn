@@ -297,13 +297,13 @@ object SpillTree {
 
 object HybridTree {
   /**
-   * Build a (hybrid-spill)[[Tree]] that facilitate k-NN query
+   * Build a (hybrid-spill) `Tree` that facilitate k-NN query
    *
    * @param data vectors that contain all training data
    * @param seed random number generator seed used in pivot point selecting
    * @param tau overlapping size
    * @param rho balance threshold
-   * @return a [[Tree]] can be used to do k-NN query
+   * @return a `Tree` can be used to do k-NN query
    */
   //noinspection ScalaStyle
   def build(data: IndexedSeq[RowWithVector],
