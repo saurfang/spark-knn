@@ -571,7 +571,7 @@ object KNN {
   /**
     * Partitioner used to map vector to leaf node which determines the partition it goes to
     *
-    * @param tree [[MetricTree]] used to find leaf
+    * @param tree `Tree` used to find leaf
     */
   class KNNPartitioner[T <: RowWithVector](tree: Tree) extends Partitioner {
     override def numPartitions: Int = tree.leafCount
