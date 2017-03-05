@@ -31,7 +31,7 @@ val knn = new KNNClassifier()
 
 val knnModel = knn.fit(training)
 
-val predicted = knn.transform(training)
+val predicted = knnModel.transform(training)
 ```
 
 ### KNNRegression
@@ -46,7 +46,7 @@ val knn = new KNNRegression()
 
 val knnModel = knn.fit(training)
 
-val predicted = knn.transform(training)
+val predicted = knnModel.transform(training)
 ```
 
 Furthermore, KNN itself is also exposed for advanced usage which returns arbitrary columns associated with found neighbors.
