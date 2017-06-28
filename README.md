@@ -1,4 +1,4 @@
-#spark-knn
+# spark-knn
 
 [![Join the chat at https://gitter.im/saurfang/spark-knn](https://badges.gitter.im/saurfang/spark-knn.svg)](https://gitter.im/saurfang/spark-knn?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
