@@ -17,9 +17,10 @@ object MNIST {
     import spark.implicits._
 
     //read in raw label and features
-    var dataset = MLUtils.loadLibSVMFile(sc, "data/mnist/mnist.bz2")
+    val rawDataset = MLUtils.loadLibSVMFile(sc, "data/mnist/mnist.bz2")
       .toDF()
-    dataset = MLUtils.convertVectorColumnsToML(dataset)
+    // convert "features" from mllib.linalg.Vector to ml.linalg.Vector
+    val dataset = MLUtils.convertVectorColumnsToML(rawDataset)
 
     //split training and testing
     val Array(train, test) = dataset
