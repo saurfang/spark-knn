@@ -32,12 +32,15 @@ object MNISTBenchmark {
     import spark.implicits._
 
     //read in raw label and features
-    val dataset = MLUtils.loadLibSVMFile(sc, path)
+    val rawDataset = MLUtils.loadLibSVMFile(sc, path)
       .zipWithIndex()
       .filter(_._2 < ns.max)
       .sortBy(_._2, numPartitions = numPartitions)
       .keys
       .toDF()
+
+    // convert "features" from mllib.linalg.Vector to ml.linalg.Vector
+    val dataset =  MLUtils.convertVectorColumnsToML(rawDataset)
       .cache()
     dataset.count() //force persist
 
