@@ -10,7 +10,7 @@ observations, we opted for the *mnist8m* processed dataset.
 
 ## kNN on local Spark
 We first compare kNN runtime performace on Spark local mode. 
-![](benchmark_files/figure-html/pre-run local-1.png) 
+![](benchmark_files/figure-html/pre-run%20local-1.png) 
 While the spill-tree implementation has much larger overhead, the savings on the search efficiency quickly
 trumps the naive brute-force approach when n gets larger.
 
