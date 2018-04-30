@@ -1,7 +1,7 @@
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import *
 from pyspark.mllib.common import inherit_doc
-from pyspark.ml.util import keyword_only
+from pyspark import keyword_only
 
 
 @inherit_doc
@@ -38,7 +38,7 @@ class KNNClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
                          bufferSizeSampleSize=list(range(100, 1000 + 1, 100)), balanceThreshold=0.7,
                          k=5, neighborsCol="neighbors", maxNeighbors=float("inf"))
 
-        kwargs = self.__init__._input_kwargs
+        kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
@@ -47,7 +47,7 @@ class KNNClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
                   bufferSizeSampleSize=list(range(100, 1000 + 1, 100)), balanceThreshold=0.7,
                   k=5, neighborsCol="neighbors", maxNeighbors=float("inf"), rawPredictionCol="rawPrediction",
                   probabilityCol="probability"):
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     def _create_model(self, java_model):
