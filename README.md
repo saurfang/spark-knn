@@ -72,9 +72,7 @@ python setup.py bdist_egg
 cd ..
 sbt package
 
-# need to add jar twice because of https://issues.apache.org/jira/browse/SPARK-5185:
-spark-submit --py-files python/dist/pyspark_knn-*.egg --driver-class-path 
-spark-knn-core/target/scala-2.10/spark-knn_*.jar --jars spark-knn-core/target/scala-2.10/spark-knn_*.jar YOUR_SCRIPT
+spark-submit --py-files python/dist/pyspark_knn-*.egg --driver-class-path spark-knn-core/target/scala-2.10/spark-knn_*.jar --jars spark-knn-core/target/scala-2.10/spark-knn_*.jar YOUR_SCRIPT
 ```
 
 ## Benchmark
