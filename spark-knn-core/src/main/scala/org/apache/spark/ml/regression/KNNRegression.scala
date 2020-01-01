@@ -147,7 +147,7 @@ with KNNModelParams with HasWeightCol with Serializable {
     copyValues(copied, extra).setParent(parent)
   }
 
-  override protected def predict(features: Vector): Double = {
+  override def predict(features: Vector): Double = {
     val neighborDataset : RDD[(Long, Array[(Row, Double)])] = transform(subTrees.context.parallelize(Seq(features)), topTree, subTrees)
     val results = neighborDataset.first()._2
     val labels = results.map(_._1.getDouble(0))

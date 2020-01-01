@@ -495,7 +495,7 @@ object KNN {
     val yMeanVariance: MeanAndVariance = meanAndVariance(y)
     val ymean = yMeanVariance.mean
 
-    val corr = (mean(x :* y) - xmean * ymean) / math.sqrt((mean(x :* x) - xmean * xmean) * (mean(y :* y) - ymean * ymean))
+    val corr = (mean(x *:* y) - xmean * ymean) / math.sqrt((mean(x *:* x) - xmean * xmean) * (mean(y *:* y) - ymean * ymean))
 
     val beta = corr * yMeanVariance.stdDev / xMeanVariance.stdDev
     val alpha = ymean - beta * xmean

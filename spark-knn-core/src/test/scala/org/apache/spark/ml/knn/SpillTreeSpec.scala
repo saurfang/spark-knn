@@ -2,9 +2,10 @@ package org.apache.spark.ml.knn
 
 import org.apache.spark.ml.knn.KNN.RowWithVector
 import org.apache.spark.ml.linalg.Vectors
-import org.scalatest.{FunSpec, Matchers}
+import org.scalatest.funspec.AnyFunSpec
+import org.scalatest.matchers.should.Matchers
 
-class SpillTreeSpec extends FunSpec with Matchers {
+class SpillTreeSpec extends AnyFunSpec with Matchers {
   describe("SpillTree") {
     val origin = Vectors.dense(0, 0)
     describe("can be constructed with empty data") {

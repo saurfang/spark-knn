@@ -10,13 +10,13 @@ import scala.reflect.macros.Context
 object Common {
   val commonSettings = Seq(
     organization in ThisBuild := "com.github.saurfang",
-    javacOptions ++= Seq("-source", "1.7", "-target", "1.7"),
-    scalacOptions ++= Seq("-target:jvm-1.7", "-deprecation", "-feature"),
+    javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
+    scalacOptions ++= Seq("-target:jvm-1.8", "-deprecation", "-feature"),
     //git.useGitDescribe := true,
     git.baseVersion := "0.0.1",
     parallelExecution in test := false,
     updateOptions := updateOptions.value.withCachedResolution(true),
-    sparkVersion := "2.1.0",
+    sparkVersion := "2.4.4",
     sparkComponents += "mllib",
     spIgnoreProvided := true
   )

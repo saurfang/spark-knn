@@ -2,9 +2,10 @@ package org.apache.spark.ml.knn
 
 import org.apache.spark.ml.knn.KNN.{RowWithVector, VectorWithNorm}
 import org.apache.spark.ml.linalg.Vectors
-import org.scalatest.{FunSpec, Matchers}
+import org.scalatest.funspec.AnyFunSpec
+import org.scalatest.matchers.should.Matchers
 
-class MetricTreeSpec extends FunSpec with Matchers {
+class MetricTreeSpec extends AnyFunSpec with Matchers {
 
   describe("MetricTree") {
     val origin = Vectors.dense(0, 0)

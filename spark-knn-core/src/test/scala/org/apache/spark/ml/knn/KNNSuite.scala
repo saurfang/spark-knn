@@ -10,12 +10,13 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.log4j
-import org.scalatest.{FunSuite, Matchers}
 
 import scala.collection.mutable
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers
 
 
-class KNNSuite extends FunSuite with Matchers  {
+class KNNSuite extends AnyFunSuite with Matchers  {
 
   val logger = log4j.Logger.getLogger(getClass)
 

@@ -13,10 +13,10 @@ a useful baseline model for many machine learning problems.
 
 ## How to Use
 
-This package is published using [sbt-spark-package](https://github.com/databricks/sbt-spark-package) and 
+This package is published using [sbt-spark-package](https://github.com/databricks/sbt-spark-package) and
 linking information can be found at http://spark-packages.org/package/saurfang/spark-knn
 
-k-NN can be used for both classification and regression, which are exposed using the new [Spark ML](http://spark.apache.org/docs/latest/ml-guide.html) 
+k-NN can be used for both classification and regression, which are exposed using the new [Spark ML](http://spark.apache.org/docs/latest/ml-guide.html)
 API based on DataFrame. Both models accept a weight column so predictions can be optionally weighted.
 
 ### KNNClassifier
@@ -57,9 +57,9 @@ When the model is trained, data points are repartitioned and within each partiti
  joined back to the search DataFrame. Assuming the training set is much larger, subsequent prediction can be much quicker
  than training. Overall the algorithm displays a `O(m log n)` runtime much better than the naive `O(m n)`
  runtime (for n training points, m prediction points and k = 1). See [benchmark](#benchmark) section for more details.
- 
+
 The number of neighbors can be set before and after training. Other parameters must be set before training and they control
-the number of partitions and trade off between accuracy and efficiency of individual search tree. 
+the number of partitions and trade off between accuracy and efficiency of individual search tree.
 Please refer to Scala doc for more information.
 
 ## Using the Python interface with spark-submit
@@ -72,7 +72,7 @@ python setup.py bdist_egg
 cd ..
 sbt package
 
-spark-submit --py-files python/dist/pyspark_knn-*.egg --driver-class-path spark-knn-core/target/scala-2.10/spark-knn_*.jar --jars spark-knn-core/target/scala-2.10/spark-knn_*.jar YOUR_SCRIPT
+spark-submit --py-files python/dist/pyspark_knn-*.egg --driver-class-path spark-knn-core/target/scala-2.11/spark-knn_*.jar --jars spark-knn-core/target/scala-2.11/spark-knn_*.jar YOUR_SCRIPT
 ```
 
 ## Benchmark
@@ -92,8 +92,8 @@ The implementation also exhibits sub-linear runtime which can lead to huge savin
 
 Note: the duration in the above plot is total runtime thus brute-force exhibits polynomial runtime while SpillTree shows
 close to linearithmic runtime.
- 
-Finally the implementation scales horizontally and has been successfully applied on datasets with low hundreds millions of 
+
+Finally the implementation scales horizontally and has been successfully applied on datasets with low hundreds millions of
 observations and low hundreds dimensions. We have no reason to say why it can't scale to billions of observations as described
 in the original Google paper.
 
@@ -118,10 +118,10 @@ in the original Google paper.
 
 ## Credits
 
-- Liu, Ting, et al. 
-"An investigation of practical approximate nearest neighbor algorithms." 
+- Liu, Ting, et al.
+"An investigation of practical approximate nearest neighbor algorithms."
 Advances in neural information processing systems. 2004.
 
-- Liu, Ting, Charles Rosenberg, and Henry Rowley. 
-"Clustering billions of images with large scale nearest neighbor search." 
+- Liu, Ting, Charles Rosenberg, and Henry Rowley.
+"Clustering billions of images with large scale nearest neighbor search."
 Applications of Computer Vision, 2007. WACV'07. IEEE Workshop on. IEEE, 2007.
