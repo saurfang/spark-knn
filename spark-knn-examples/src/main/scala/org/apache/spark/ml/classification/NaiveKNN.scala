@@ -162,7 +162,7 @@ class NaiveKNNClassifierModel(
     }
   }
 
-  override protected def predictRaw(features: Vector): Vector = {
+  override def predictRaw(features: Vector): Vector = {
     throw new SparkException("predictRaw function should not be called directly since kNN prediction is done in distributed fashion. Use transform instead.")
   }
 }
