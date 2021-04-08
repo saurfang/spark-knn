@@ -3,7 +3,7 @@ package org.apache.spark.ml.knn
 import org.apache.spark.ml.PredictionModel
 import org.apache.spark.ml.classification.KNNClassifier
 import org.apache.spark.ml.feature.VectorAssembler
-import org.apache.spark.ml.knn.KNN.{EuclideanDistanceMetric, VectorWithNorm}
+import org.apache.spark.ml.knn.KNN.VectorWithNorm
 import org.apache.spark.ml.regression.KNNRegression
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.sql.functions._

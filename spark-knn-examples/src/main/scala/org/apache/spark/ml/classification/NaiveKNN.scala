@@ -1,8 +1,8 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkException
-import org.apache.spark.ml.knn.KNN.{DistanceMetric, EuclideanDistanceMetric, RowWithVector, VectorWithNorm}
-import org.apache.spark.ml.knn.{KNNModel, KNNParams}
+import org.apache.spark.ml.knn.KNN.{RowWithVector, VectorWithNorm}
+import org.apache.spark.ml.knn.{DistanceMetric, EuclideanDistanceMetric, KNNModel, KNNParams}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.ml.{Model, Predictor}

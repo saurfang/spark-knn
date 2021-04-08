@@ -1,6 +1,6 @@
 package org.apache.spark.ml.knn
 
-import org.apache.spark.ml.knn.KNN.{EuclideanDistanceMetric, RowWithVector}
+import org.apache.spark.ml.knn.KNN.RowWithVector
 import org.apache.spark.ml.linalg.Vectors
 import org.scalatest.funspec.AnyFunSpec
 import org.scalatest.matchers.should.Matchers

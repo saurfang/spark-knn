@@ -4,7 +4,7 @@ import breeze.linalg.{DenseVector, Vector => BV}
 import breeze.stats._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.classification.KNNClassificationModel
-import org.apache.spark.ml.knn.KNN.{DistanceMetric, KNNPartitioner, RowWithVector, VectorWithNorm}
+import org.apache.spark.ml.knn.KNN.{KNNPartitioner, RowWithVector, VectorWithNorm}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.regression.KNNRegressionModel
@@ -438,77 +438,6 @@ class KNN(override val uid: String) extends Estimator[KNNModel] with KNNParams {
 object KNN {
 
   val logger = log4j.Logger.getLogger(classOf[KNN])
-
-  object DistanceMetric {
-    def apply(metric: String): DistanceMetric = {
-      metric match {
-        case "" | "euclidean" => EuclideanDistanceMetric
-        case "nan_euclidean" => NaNEuclideanDistanceMetric
-        case _ => throw new IllegalArgumentException(s"Unsupported distance metric: $metric")
-      }
-    }
-  }
-  trait DistanceMetric {
-    def fastSquaredDistance(v1: VectorWithNorm, v2: VectorWithNorm): Double
-
-    def fastDistance(v1: VectorWithNorm, v2: VectorWithNorm): Double = {
-      math.sqrt(fastSquaredDistance(v1, v2))
-    }
-  }
-
-  object EuclideanDistanceMetric extends DistanceMetric with Serializable {
-    override def fastSquaredDistance(v1: VectorWithNorm, v2: VectorWithNorm): Double = {
-      KNNUtils.fastSquaredDistance(v1.vector, v1.norm, v2.vector, v2.norm)
-    }
-  }
-
-  /**
-   * Calculate NaN-Euclidean distance by using only non NaN values in each vector
-   */
-  object NaNEuclideanDistanceMetric extends DistanceMetric with Serializable {
-
-    override def fastSquaredDistance(v1: VectorWithNorm, v2: VectorWithNorm): Double = {
-      val it1 = v1.vector.activeIterator
-      val it2 = v2.vector.activeIterator
-      if(!it1.hasNext || !it2.hasNext) return 0.0
-      var result = 0.0
-      // initial case
-      var (idx1, val1) = it1.next()
-      var (idx2, val2) = it2.next()
-      // iterator over the vectors
-      while(it1.hasNext && it2.hasNext) {
-        var (advance1, advance2) = (false, false)
-        if(idx1 < idx2) {
-          // advance iterator on first vector
-          advance1 = true
-        } else if(idx1 > idx2) {
-          // advance iterator on second vector
-          advance2 = true
-        } else {
-          // indexes matches
-          if(!val1.isNaN && !val2.isNaN) {
-            result += Math.pow(val1 - val2, 2)
-          }
-          advance1 = true
-          advance2 = true
-        }
-        if(advance1) {
-          val next1 = it1.next()
-          idx1 = next1._1
-          val1 = next1._2
-        }
-        if(advance2) {
-          val next2 = it2.next()
-          idx2 = next2._1
-          val2 = next2._2
-        }
-      }
-      if(idx1 == idx2 && !val1.isNaN && !val2.isNaN) {
-        result += Math.pow(val1 - val2, 2)
-      }
-      result
-    }
-  }
 
   /**
     * VectorWithNorm can use more efficient algorithm to calculate distance
