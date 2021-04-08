@@ -456,7 +456,7 @@ object KNN {
     }
   }
 
-  object EuclideanDistanceMetric extends DistanceMetric {
+  object EuclideanDistanceMetric extends DistanceMetric with Serializable {
     override def fastSquaredDistance(v1: VectorWithNorm, v2: VectorWithNorm): Double = {
       KNNUtils.fastSquaredDistance(v1.vector, v1.norm, v2.vector, v2.norm)
     }
@@ -465,7 +465,7 @@ object KNN {
   /**
    * Calculate NaN-Euclidean distance by using only non NaN values in each vector
    */
-  object NaNEuclideanDistanceMetric extends DistanceMetric {
+  object NaNEuclideanDistanceMetric extends DistanceMetric with Serializable {
 
     override def fastSquaredDistance(v1: VectorWithNorm, v2: VectorWithNorm): Double = {
       val it1 = v1.vector.activeIterator
