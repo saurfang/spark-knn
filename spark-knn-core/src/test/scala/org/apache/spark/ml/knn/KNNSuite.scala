@@ -3,7 +3,7 @@ package org.apache.spark.ml.knn
 import org.apache.spark.ml.PredictionModel
 import org.apache.spark.ml.classification.KNNClassifier
 import org.apache.spark.ml.feature.VectorAssembler
-import org.apache.spark.ml.knn.KNN.VectorWithNorm
+import org.apache.spark.ml.knn.KNN.{EuclideanDistanceMetric, VectorWithNorm}
 import org.apache.spark.ml.regression.KNNRegression
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.sql.functions._
@@ -30,6 +30,7 @@ class KNNSuite extends AnyFunSuite with Matchers  {
   private[this] val leafSize = 5
 
   test("KNN can be fitted") {
+    val distance = EuclideanDistanceMetric
     val knn = new KNN()
       .setTopTreeSize(data.size / 10)
       .setTopTreeLeafSize(leafSize)
@@ -51,11 +52,12 @@ class KNNSuite extends AnyFunSuite with Matchers  {
         }
         neighbors.length shouldBe 1
         val neighbor = neighbors.head.getAs[Vector](0)
-        new VectorWithNorm(vector).fastSquaredDistance(new VectorWithNorm(neighbor)) shouldBe 0.0
+        distance.fastSquaredDistance(new VectorWithNorm(vector), new VectorWithNorm(neighbor)) shouldBe 0.0
     }
   }
 
   test("KNN fits correctly with maxDistance") {
+    val distanceMetric = EuclideanDistanceMetric
     val knn = new KNN()
       .setTopTreeSize(data.size / 10)
       .setTopTreeLeafSize(leafSize)
@@ -84,16 +86,17 @@ class KNNSuite extends AnyFunSuite with Matchers  {
         neighbors.length should be <= 5 - numEdges
 
         val closest = neighbors.head.getAs[Vector](0)
-        new VectorWithNorm(vector).fastSquaredDistance(new VectorWithNorm(closest)) shouldBe 0.0
+        distanceMetric.fastSquaredDistance(new VectorWithNorm(vector), new VectorWithNorm(closest)) shouldBe 0.0
         val rest = neighbors.tail.map(_.getAs[Vector](0))
         rest.foreach { neighbor =>
-          val sqDist = new VectorWithNorm(vector).fastSquaredDistance(new VectorWithNorm(neighbor))
+          val sqDist = distanceMetric.fastSquaredDistance(new VectorWithNorm(vector), new VectorWithNorm(neighbor))
           sqDist shouldEqual 1.0 +- 1e-6
         }
     }
   }
 
   test("KNN returns correct distance column values") {
+    val distanceMetric = EuclideanDistanceMetric
     val knn = new KNN()
       .setTopTreeSize(data.size / 10)
       .setTopTreeLeafSize(leafSize)
@@ -131,13 +134,13 @@ class KNNSuite extends AnyFunSuite with Matchers  {
 
         val closest = neighbors.head.getAs[Vector](0)
         val closestDist = distances.head
-        val closestCalDist = new VectorWithNorm(vector).fastSquaredDistance(new VectorWithNorm(closest))
+        val closestCalDist = distanceMetric.fastSquaredDistance(new VectorWithNorm(vector), new VectorWithNorm(closest))
         closestCalDist shouldEqual closestDist
 
         val rest = neighbors.tail.map(_.getAs[Vector](0)).zip(distances.tail.toList)
         rest.foreach {
           case (neighbor, distance) =>
-            val sqDist = new VectorWithNorm(vector).fastSquaredDistance(new VectorWithNorm(neighbor))
+            val sqDist = distanceMetric.fastSquaredDistance(new VectorWithNorm(vector), new VectorWithNorm(neighbor))
             sqDist shouldEqual 1.0 +- 1e-6
             sqDist shouldEqual distance +- 1e-6
         }
