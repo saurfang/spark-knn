@@ -101,6 +101,9 @@ private[ml] trait KNNModelParams extends Params with HasFeaturesCol with HasInpu
   /** @group getParam */
   def getMetric: String = $(metric)
 
+  //fill in default distance metric
+  setDefault(metric, "euclidean")
+
   private[ml] def transform(data: RDD[Vector], topTree: Broadcast[Tree], subTrees: RDD[Tree]): RDD[(Long, Array[(Row,Double)])] = {
     val searchData = data.zipWithIndex()
       .flatMap {
@@ -406,7 +409,8 @@ class KNN(override val uid: String) extends Estimator[KNNModel] with KNNParams {
 
     val tau =
       if ($(balanceThreshold) > 0 && $(bufferSize) < 0) {
-        KNN.estimateTau(data, $(bufferSizeSampleSizes), rand.nextLong(), distanceMetric)
+        val estimates = KNN.estimateTau(data, $(bufferSizeSampleSizes), rand.nextLong(), distanceMetric)
+        math.max(0, estimates)
       } else {
         math.max(0, $(bufferSize))
       }
