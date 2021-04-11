@@ -2,7 +2,7 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkException
 import org.apache.spark.ml.knn.KNN.{RowWithVector, VectorWithNorm}
-import org.apache.spark.ml.knn.{KNNModel, KNNParams}
+import org.apache.spark.ml.knn.{DistanceMetric, EuclideanDistanceMetric, KNNModel, KNNParams}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.ml.{Model, Predictor}
@@ -19,8 +19,9 @@ import scala.collection.mutable.ArrayBuffer
 /**
   * Brute-force kNN with k = 1
   */
-class NaiveKNNClassifier(override val uid: String) extends Predictor[Vector, NaiveKNNClassifier, NaiveKNNClassifierModel] {
-  def this() = this(Identifiable.randomUID("naiveknnc"))
+class NaiveKNNClassifier(override val uid: String, val distanceMetric: DistanceMetric)
+  extends Predictor[Vector, NaiveKNNClassifier, NaiveKNNClassifierModel] {
+  def this() = this(Identifiable.randomUID("naiveknnc"), EuclideanDistanceMetric)
 
   override def copy(extra: ParamMap): NaiveKNNClassifier = defaultCopy(extra)
 
@@ -57,7 +58,7 @@ class NaiveKNNClassifier(override val uid: String) extends Predictor[Vector, Nai
       case (label, features) => (label, new VectorWithNorm(features))
     }
 
-    new NaiveKNNClassifierModel(uid, points, numClasses)
+    new NaiveKNNClassifierModel(uid, points, numClasses, distanceMetric)
   }
 
 }
@@ -65,7 +66,8 @@ class NaiveKNNClassifier(override val uid: String) extends Predictor[Vector, Nai
 class NaiveKNNClassifierModel(
                                override val uid: String,
                                val points: RDD[(Double, VectorWithNorm)],
-                               val _numClasses: Int) extends ProbabilisticClassificationModel[Vector, NaiveKNNClassifierModel] {
+                               val _numClasses: Int,
+                               val distanceMetric: DistanceMetric) extends ProbabilisticClassificationModel[Vector, NaiveKNNClassifierModel] {
   override def numClasses: Int = _numClasses
 
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -78,7 +80,7 @@ class NaiveKNNClassifierModel(
       .cartesian(points)
       .map {
         case ((u, i), (label, v)) =>
-            val dist = u.fastSquaredDistance(v)
+            val dist = distanceMetric.fastSquaredDistance(u, v)
             (i, (dist, label))
       }
       .topByKey(1)(Ordering.by(e => -e._1))
@@ -133,7 +135,7 @@ class NaiveKNNClassifierModel(
   }
 
   override def copy(extra: ParamMap): NaiveKNNClassifierModel = {
-    val copied = new NaiveKNNClassifierModel(uid, points, numClasses)
+    val copied = new NaiveKNNClassifierModel(uid, points, numClasses, distanceMetric)
     copyValues(copied, extra).setParent(parent)
   }
 

@@ -7,14 +7,15 @@ import org.scalatest.matchers.should.Matchers
 
 class SpillTreeSpec extends AnyFunSpec with Matchers {
   describe("SpillTree") {
+    val distanceMetric = EuclideanDistanceMetric
     val origin = Vectors.dense(0, 0)
     describe("can be constructed with empty data") {
-      val tree = SpillTree.build(IndexedSeq.empty[RowWithVector], tau = 0.0)
+      val tree = SpillTree.build(IndexedSeq.empty[RowWithVector], tau = 0.0, distanceMetric=distanceMetric)
       it("iterator should be empty") {
         tree.iterator shouldBe empty
       }
       it("should return empty when queried") {
-        tree.query(origin) shouldBe empty
+        tree.query(origin).isEmpty shouldBe true
       }
       it("should have zero leaf") {
         tree.leafCount shouldBe 0
@@ -28,7 +29,7 @@ class SpillTreeSpec extends AnyFunSpec with Matchers {
       }
       val leafSize = n / 4
       describe("built with tau = 0.0") {
-        val tree = SpillTree.build(points, leafSize = leafSize, tau = 0.0)
+        val tree = SpillTree.build(points, leafSize = leafSize, tau = 0.0, distanceMetric=distanceMetric)
         it("should have correct size") {
           tree.size shouldBe points.size
         }
@@ -41,7 +42,7 @@ class SpillTreeSpec extends AnyFunSpec with Matchers {
         }
       }
       describe("built with tau = 0.5") {
-        val tree = SpillTree.build(points, leafSize = leafSize, tau = 0.5)
+        val tree = SpillTree.build(points, leafSize = leafSize, tau = 0.5, distanceMetric=distanceMetric)
         it("should have correct size") {
           tree.size shouldBe points.size
         }
@@ -71,12 +72,12 @@ class SpillTreeSpec extends AnyFunSpec with Matchers {
   describe("HybridTree") {
     val origin = Vectors.dense(0, 0)
     describe("can be constructed with empty data") {
-      val tree = HybridTree.build(IndexedSeq.empty[RowWithVector], tau = 0.0)
+      val tree = HybridTree.build(IndexedSeq.empty[RowWithVector], tau = 0.0, distanceMetric=EuclideanDistanceMetric)
       it("iterator should be empty") {
         tree.iterator shouldBe empty
       }
       it("should return empty when queried") {
-        tree.query(origin) shouldBe empty
+        tree.query(origin).isEmpty shouldBe true
       }
       it("should have zero leaf") {
         tree.leafCount shouldBe 0
@@ -89,7 +90,7 @@ class SpillTreeSpec extends AnyFunSpec with Matchers {
         i => new RowWithVector(Vectors.dense(math.sin(2 * math.Pi * i / n), math.cos(2 * math.Pi * i / n)), null)
       }
       val leafSize = n / 4
-      val tree = HybridTree.build(points, leafSize = leafSize, tau = 0.5)
+      val tree = HybridTree.build(points, leafSize = leafSize, tau = 0.5, distanceMetric=EuclideanDistanceMetric)
       it("should have correct size") {
         tree.size shouldBe points.size
       }
