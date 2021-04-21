@@ -167,7 +167,7 @@ class KNNSuite extends AnyFunSuite with Matchers  {
     checkKNN(knn.setWeightCol("z").fit)
   }
 
-  test("KNNParmas are copied correctly") {
+  test("KNNParams are copied correctly") {
     val knn = new KNNClassifier()
       .setTopTreeSize(data.size / 10)
       .setTopTreeLeafSize(leafSize)
@@ -178,6 +178,19 @@ class KNNSuite extends AnyFunSuite with Matchers  {
     model.getK shouldBe 2
     // check auto generated buffer size is correctly transferred
     model.getBufferSize should be > 0.0
+  }
+
+  test("Errors with helpful message if size of data is smaller than topTreeSize") {
+    val knn = new KNNClassifier()
+      .setTopTreeSize(data.size + 1)
+      .setK(2)
+
+    val thrown = intercept[Exception] {
+      knn.fit(createDataFrame().withColumn("label", lit(1.0)))
+    }
+
+    assert(thrown.getMessage == "Invalid top tree size relative to size of data. " +
+      "Data to fit of size 441 was less than topTreeSize 442")
   }
 
   test("BufferSize is not estimated if rho = 0") {
