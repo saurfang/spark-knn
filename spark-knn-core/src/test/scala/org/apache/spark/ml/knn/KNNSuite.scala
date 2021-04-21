@@ -180,19 +180,6 @@ class KNNSuite extends AnyFunSuite with Matchers  {
     model.getBufferSize should be > 0.0
   }
 
-  test("Errors with helpful message if size of data is smaller than topTreeSize") {
-    val knn = new KNNClassifier()
-      .setTopTreeSize(data.size + 1)
-      .setK(2)
-
-    val thrown = intercept[Exception] {
-      knn.fit(createDataFrame().withColumn("label", lit(1.0)))
-    }
-
-    assert(thrown.getMessage == "Invalid top tree size relative to size of data. " +
-      "Data to fit of size 441 was less than topTreeSize 442")
-  }
-
   test("BufferSize is not estimated if rho = 0") {
     val knn = new KNNClassifier()
       .setTopTreeSize(data.size / 10)
