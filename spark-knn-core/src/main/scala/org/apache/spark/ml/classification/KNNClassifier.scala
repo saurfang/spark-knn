@@ -110,9 +110,17 @@ with KNNParams with HasWeightCol {
     knnModel.toNewClassificationModel(uid, numClasses)
   }
 
+  // Need to overwrite this method because we need to manually overwrite the buffer size
+  // because it is not supposed to stay the same as the Classifier if user sets it to -1.
   override def fit(dataset: Dataset[_]): KNNClassificationModel = {
-    // Need to overwrite this method because we need to manually overwrite the buffer size
-    // because it is not supposed to stay the same as the Classifier if user sets it to -1.
+
+    if (dataset.count < getTopTreeSize) {
+      val msg = s"Invalid top tree size relative to size of data. " +
+        s"Data to fit of size ${dataset.count} was less than topTreeSize $getTopTreeSize"
+      logError(msg)
+      throw new SparkException(msg)
+    }
+
     transformSchema(dataset.schema, logging = true)
     val model = train(dataset)
     val bufferSize = model.getBufferSize

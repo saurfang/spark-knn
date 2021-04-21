@@ -167,7 +167,7 @@ class KNNSuite extends AnyFunSuite with Matchers  {
     checkKNN(knn.setWeightCol("z").fit)
   }
 
-  test("KNNParmas are copied correctly") {
+  test("KNNParams are copied correctly") {
     val knn = new KNNClassifier()
       .setTopTreeSize(data.size / 10)
       .setTopTreeLeafSize(leafSize)
