@@ -16,7 +16,7 @@ object Common {
     git.baseVersion := "0.0.1",
     parallelExecution in test := false,
     updateOptions := updateOptions.value.withCachedResolution(true),
-    sparkVersion := "3.0.1",
+    sparkVersion := "3.1.1",
     sparkComponents += "mllib",
     spIgnoreProvided := true
   )
