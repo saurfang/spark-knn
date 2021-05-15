@@ -12,7 +12,7 @@ object Dependencies {
 
     object Test {
       val scalatest = "org.scalatest" %% "scalatest" % "3.1.0" % "test"
-      val sparktest = "org.apache.spark" %% "spark-core" % "3.0.1"  % "test" classifier "tests"
+      val sparktest = "org.apache.spark" %% "spark-core" % "3.1.1"  % "test" classifier "tests"
     }
   }
 
