@@ -8,6 +8,7 @@ import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.ml.{Model, Predictor}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.stat.MultiClassSummarizer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.{ArrayType, DoubleType, StructType}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
