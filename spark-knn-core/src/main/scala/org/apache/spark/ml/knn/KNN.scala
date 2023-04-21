@@ -369,6 +369,9 @@ class KNN(override val uid: String) extends Estimator[KNNModel] with KNNParams {
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
+  def setDistanceCol(value: String): this.type = set(distanceCol, value)
+
+  /** @group setParam */
   def setK(value: Int): this.type = set(k, value)
 
   /** @group setParam */
