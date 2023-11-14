@@ -8,11 +8,13 @@ import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.ml.{Model, Predictor}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.stat.MultiClassSummarizer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.{ArrayType, DoubleType, StructType}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
+import org.apache.spark.sql.functions.col
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -24,6 +26,12 @@ class NaiveKNNClassifier(override val uid: String, val distanceMetric: DistanceM
   def this() = this(Identifiable.randomUID("naiveknnc"), EuclideanDistanceMetric)
 
   override def copy(extra: ParamMap): NaiveKNNClassifier = defaultCopy(extra)
+
+  /** reimplemented as it has been removed removed from spark 3.4.0 */
+  private def extractLabeledPoints(dataset: Dataset[_]): RDD[LabeledPoint] = {
+    import dataset.sparkSession.implicits._
+    dataset.select(col($(labelCol)), col($(featuresCol))).as[LabeledPoint].rdd
+  }
 
   override protected def train(dataset: Dataset[_]): NaiveKNNClassifierModel = {
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
