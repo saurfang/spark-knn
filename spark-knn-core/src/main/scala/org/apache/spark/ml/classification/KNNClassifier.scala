@@ -13,6 +13,7 @@ import org.apache.spark.sql.types.{DoubleType, StructType}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.SparkException
+import org.apache.spark.sql.functions.col
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -76,6 +77,12 @@ with KNNParams with HasWeightCol {
 
   /** @group setParam */
   def setSeed(value: Long): this.type = set(seed, value)
+
+  /** reimplemented as it has been removed removed from spark 3.4.0 */
+  private def extractLabeledPoints(dataset: Dataset[_]): RDD[LabeledPoint] = {
+    import dataset.sparkSession.implicits._
+    dataset.select(col($(labelCol)), col($(featuresCol))).as[LabeledPoint].rdd
+  }
 
   override protected def train(dataset: Dataset[_]): KNNClassificationModel = {
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
